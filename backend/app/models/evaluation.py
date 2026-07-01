@@ -20,6 +20,19 @@ class SectionScore(BaseModel):
     )
 
 
+
+# Ενδεικτικοί/προσωρινοί τομείς αξιολόγησης — single source of truth για τη
+# section-detection λογική του chunker (fuzzy matching, βλ. app/ingestion/chunker.py).
+# Θα αντικατασταθεί όταν οριστικοποιηθεί το πραγματικό template εκθέσεων.
+KNOWN_SECTIONS: list[str] = [
+    "Στοχοθεσία",
+    "Ηγετική Ικανότητα",
+    "Επαγγελματική Επάρκεια",
+    "Συνεργασία και Ομαδικότητα",
+    "Πρωτοβουλία και Καινοτομία",
+]
+
+
 class EvaluationReport(BaseModel):
     person_name: str = Field(description="Ονοματεπώνυμο αξιολογούμενου")
     person_id: Optional[str] = Field(
