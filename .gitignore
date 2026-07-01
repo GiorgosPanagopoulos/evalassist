@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+backend/.venv/
+*.egg-info/
+
+# Data / DB (κρίσιμα, offline, μη public)
+backend/data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Vector store persistence
+chroma_db/
+backend/chroma_db/
+
+# Ingested source PDFs
+data/raw_pdfs/
+
+# Env
+.env
+.env.local
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
