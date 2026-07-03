@@ -6,7 +6,10 @@
 στο prompt του LLM.
 """
 
+import requests
+
 from app.core.config import get_settings
+from app.core.exceptions import LLMUnavailableError
 from app.core.prompt_loader import load_prompt
 from app.ingestion.embedder import Embedder
 from app.ingestion.vectorstore import CHROMA_DIR, get_collection
@@ -79,7 +82,12 @@ class SemanticRetriever:
 
         retrieved_doc_ids = sorted({c.doc_id for c in citations})
         user_prompt = f"Ερώτημα: {query_text}\n\nΑποσπάσματα:\n\n" + "\n\n---\n\n".join(excerpts)
-        answer = self.llm.generate(self.system_prompt, user_prompt)
+        try:
+            answer = self.llm.generate(self.system_prompt, user_prompt)
+        except requests.RequestException as exc:
+            # Η ανάκτηση πέτυχε -> το audit trail πρέπει να κρατήσει τα doc_ids
+            # που ήδη ανακτήθηκαν, ακόμη κι αν η σύνθεση απάντησης αποτύχει.
+            raise LLMUnavailableError(str(exc), retrieved_doc_ids=retrieved_doc_ids) from exc
 
         return SemanticResult(
             answer=answer,

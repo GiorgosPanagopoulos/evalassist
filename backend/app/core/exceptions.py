@@ -15,3 +15,11 @@ class IsolationError(Exception):
 
 class LLMUnavailableError(Exception):
     """Το τοπικό LLM (Ollama) δεν είναι διαθέσιμο ή επέστρεψε σφάλμα."""
+
+    def __init__(
+        self,
+        message: str = "Το τοπικό LLM δεν είναι διαθέσιμο.",
+        retrieved_doc_ids: list[str] | None = None,
+    ):
+        super().__init__(message)
+        self.retrieved_doc_ids = retrieved_doc_ids or []
