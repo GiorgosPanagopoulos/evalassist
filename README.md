@@ -228,7 +228,7 @@ evalassist/
 
 ## License
 
-Proprietary. Internal system for the Hellenic Armed Forces; not licensed for external use or redistribution.
+Proprietary. Internal system for the Hellenic Armed Forces, not licensed for external use or redistribution.
 
 <div align="center">
 
