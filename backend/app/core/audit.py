@@ -17,8 +17,9 @@ class AuditEntry(BaseModel):
     prompt_version: str | None = None
 
 
-def write_audit(conn: sqlite3.Connection, entry: AuditEntry) -> None:
-    conn.execute(
+def write_audit(conn: sqlite3.Connection, entry: AuditEntry) -> int:
+    """Επιστρέφει το autoincrement id (audit_id) της γραμμής που γράφτηκε."""
+    cursor = conn.execute(
         """
         INSERT INTO audit_log (user, query, retrieved_doc_ids, mode, prompt_version)
         VALUES (?, ?, ?, ?, ?)
@@ -31,3 +32,4 @@ def write_audit(conn: sqlite3.Connection, entry: AuditEntry) -> None:
             entry.prompt_version,
         ),
     )
+    return cursor.lastrowid
