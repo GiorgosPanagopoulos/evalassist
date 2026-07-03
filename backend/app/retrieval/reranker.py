@@ -6,10 +6,12 @@ Lazy import+φόρτωση μοντέλου (ίδιο pattern με app.ingestion
 
 from typing import TYPE_CHECKING
 
+from app.core.config import get_settings
+
 if TYPE_CHECKING:
     from sentence_transformers import CrossEncoder
 
-MODEL_NAME = "BAAI/bge-reranker-v2-m3"
+MODEL_NAME = get_settings().RERANKER_MODEL
 
 
 class Reranker:

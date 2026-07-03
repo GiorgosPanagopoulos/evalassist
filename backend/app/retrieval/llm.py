@@ -6,8 +6,10 @@
 
 import requests
 
-MODEL_NAME = "qwen2.5:14b"
-DEFAULT_BASE_URL = "http://localhost:11434"
+from app.core.config import get_settings
+
+MODEL_NAME = get_settings().OLLAMA_MODEL
+DEFAULT_BASE_URL = get_settings().OLLAMA_URL
 DEFAULT_TIMEOUT_S = 120
 
 

@@ -1,8 +1,9 @@
 import sqlite3
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parents[2]
-DB_PATH = BASE_DIR / "data" / "evalassist.db"
+from app.core.config import get_settings
+
+DB_PATH = get_settings().DB_PATH
 SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
 
 
@@ -14,10 +15,20 @@ def get_connection(db_path: Path = DB_PATH) -> sqlite3.Connection:
     return conn
 
 
+def _migrate_audit_log(conn: sqlite3.Connection) -> None:
+    """Migration-safe προσθήκη της prompt_version στήλης σε DBs που
+    δημιουργήθηκαν πριν από αυτήν (CREATE TABLE IF NOT EXISTS δεν αλλάζει
+    υπάρχοντα schema)."""
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(audit_log)")}
+    if columns and "prompt_version" not in columns:
+        conn.execute("ALTER TABLE audit_log ADD COLUMN prompt_version TEXT")
+
+
 def init_db(db_path: Path = DB_PATH) -> None:
     conn = get_connection(db_path)
     try:
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        _migrate_audit_log(conn)
         conn.commit()
     finally:
         conn.close()

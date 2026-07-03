@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
     user                TEXT NOT NULL,
     query               TEXT NOT NULL,
     retrieved_doc_ids   TEXT,
-    mode                TEXT NOT NULL CHECK (mode IN ('structured', 'semantic'))
+    mode                TEXT NOT NULL CHECK (mode IN ('structured', 'semantic')),
+    prompt_version      TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_evaluations_person_period ON evaluations(person_id, period);

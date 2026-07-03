@@ -9,9 +9,10 @@ from pathlib import Path
 
 import chromadb
 
-BASE_DIR = Path(__file__).resolve().parents[2]
-CHROMA_DIR = BASE_DIR / "chroma_db"
-COLLECTION_NAME = "evaluation_chunks"
+from app.core.config import get_settings
+
+CHROMA_DIR = get_settings().CHROMA_PATH
+COLLECTION_NAME = get_settings().CHROMA_COLLECTION
 
 
 def get_collection(persist_dir: Path = CHROMA_DIR):

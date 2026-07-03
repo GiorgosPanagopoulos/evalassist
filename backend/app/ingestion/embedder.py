@@ -6,10 +6,12 @@
 
 from typing import TYPE_CHECKING
 
+from app.core.config import get_settings
+
 if TYPE_CHECKING:
     from sentence_transformers import SentenceTransformer
 
-MODEL_NAME = "BAAI/bge-m3"
+MODEL_NAME = get_settings().EMBEDDING_MODEL
 
 
 class Embedder:
