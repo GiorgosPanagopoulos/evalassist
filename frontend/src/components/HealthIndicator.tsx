@@ -20,23 +20,28 @@ export function HealthIndicator({ api }: { api: HealthIndicatorApi }) {
 
   if (ollamaReachable === null) {
     return (
-      <span className="inline-flex items-center gap-2 text-xs text-navy/50 dark:text-gold/50">
-        <span className="h-2 w-2 rounded-full bg-gray-400" aria-hidden />
+      <span className="inline-flex items-center gap-2 text-[11.5px]" style={{ color: '#8b8b95' }}>
+        <span className="h-1.75 w-1.75 rounded-full bg-gray-400" aria-hidden />
         Έλεγχος κατάστασης...
       </span>
     )
   }
 
   return (
-    <span className="inline-flex items-center gap-2 text-xs">
+    <span className="inline-flex items-center gap-2 text-[11.5px]">
       <span
-        className={`h-2 w-2 rounded-full ${ollamaReachable ? 'bg-green-500' : 'bg-amber-500'}`}
+        className="h-1.75 w-1.75 rounded-full"
+        style={
+          ollamaReachable
+            ? { backgroundColor: '#3fdd78', boxShadow: '0 0 8px rgba(63,221,120,.6)' }
+            : { backgroundColor: '#f59e0b' }
+        }
         aria-hidden
       />
       {ollamaReachable ? (
-        <span className="text-navy dark:text-gold">Ollama διαθέσιμο</span>
+        <span style={{ color: '#8b8b95' }}>Σύστημα ενεργό</span>
       ) : (
-        <span className="text-amber-600 dark:text-amber-400">Ollama μη διαθέσιμο</span>
+        <span style={{ color: '#f59e0b' }}>Ollama μη διαθέσιμο</span>
       )}
     </span>
   )

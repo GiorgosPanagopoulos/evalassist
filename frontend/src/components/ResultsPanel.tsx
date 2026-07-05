@@ -20,10 +20,14 @@ function isSection(value: unknown): value is Section {
 function SectionsTable({ sections, title }: { sections: Section[]; title?: string }) {
   return (
     <div className="flex flex-col gap-1">
-      {title && <h3 className="text-sm font-semibold text-navy dark:text-gold">{title}</h3>}
+      {title && (
+        <h3 className="text-sm font-semibold" style={{ color: '#f2f2f4' }}>
+          {title}
+        </h3>
+      )}
       <table className="w-full border-collapse text-sm">
         <thead>
-          <tr className="border-b border-navy/20 text-left dark:border-gold/20">
+          <tr className="border-b text-left" style={{ borderColor: '#26262d' }}>
             <th className="py-1">Ενότητα</th>
             <th className="py-1">Βαθμολογία</th>
             <th className="py-1">Σχόλιο</th>
@@ -31,7 +35,7 @@ function SectionsTable({ sections, title }: { sections: Section[]; title?: strin
         </thead>
         <tbody>
           {sections.map((s, idx) => (
-            <tr key={`${s.section}-${idx}`} className="border-b border-navy/10 dark:border-gold/10">
+            <tr key={`${s.section}-${idx}`} className="border-b" style={{ borderColor: '#1d1d22' }}>
               <td className="py-1">{s.section}</td>
               <td className="py-1 font-mono">{s.score}</td>
               <td className="py-1">{s.comment}</td>
@@ -69,7 +73,9 @@ function StructuredView({ result, auditId }: { result: StructuredResult; auditId
         </div>
       )}
 
-      <p className="font-mono text-xs text-navy/60 dark:text-gold/60">Καταχώρηση ελέγχου: #{auditId}</p>
+      <p className="font-mono text-xs" style={{ color: '#8b8b95' }}>
+        Καταχώρηση ελέγχου: #{auditId}
+      </p>
     </div>
   )
 }
@@ -85,7 +91,7 @@ export function ResultsPanel({ result, auditId }: ResultsPanelProps) {
   }
 
   return (
-    <div className="rounded border border-navy/20 bg-white p-4 dark:border-gold/20 dark:bg-navy">
+    <div className="rounded border p-4" style={{ borderColor: '#26262d', backgroundColor: '#0e0e11' }}>
       {result.mode === 'semantic' ? (
         <SemanticAnswer answer={result.answer} citations={result.citations} auditId={auditId} />
       ) : (

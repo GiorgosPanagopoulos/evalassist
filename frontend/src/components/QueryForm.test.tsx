@@ -103,10 +103,10 @@ describe('QueryForm', () => {
 
     await user.type(screen.getByLabelText('Ερώτηση'), 'ab')
 
-    expect(screen.getByRole('button', { name: 'Υποβολή ερωτήματος' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Υποβολή ερωτήματος/ })).toBeDisabled()
 
     await user.type(screen.getByLabelText('Ερώτηση'), 'c')
-    expect(screen.getByRole('button', { name: 'Υποβολή ερωτήματος' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Υποβολή ερωτήματος/ })).toBeEnabled()
   })
 
   it('submits the exact structured payload', async () => {
@@ -120,7 +120,7 @@ describe('QueryForm', () => {
     await screen.findByRole('option', { name: '2024-Q1' })
     await user.selectOptions(screen.getByLabelText('Περίοδος'), '2024-Q1')
 
-    await user.click(screen.getByRole('button', { name: 'Υποβολή ερωτήματος' }))
+    await user.click(screen.getByRole('button', { name: /Υποβολή ερωτήματος/ }))
 
     await waitFor(() =>
       expect(api.queryStructured).toHaveBeenCalledWith({
@@ -145,7 +145,7 @@ describe('QueryForm', () => {
     await user.click(screen.getByRole('button', { name: 'Σημασιολογική' }))
     await user.type(screen.getByLabelText('Ερώτηση'), 'Πώς πήγε;')
 
-    await user.click(screen.getByRole('button', { name: 'Υποβολή ερωτήματος' }))
+    await user.click(screen.getByRole('button', { name: /Υποβολή ερωτήματος/ }))
 
     await waitFor(() =>
       expect(api.querySemantic).toHaveBeenCalledWith({

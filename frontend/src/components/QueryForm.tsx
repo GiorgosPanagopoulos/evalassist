@@ -20,6 +20,7 @@ interface QueryFormProps {
   api: QueryFormApi
   onResult: (result: StructuredResult | SemanticResult, auditId: number) => void
   onError?: (error: ApiError) => void
+  onModeLabelChange?: (label: string) => void
 }
 
 const OPERATIONS: { value: StructuredOperation; label: string }[] = [
@@ -28,7 +29,23 @@ const OPERATIONS: { value: StructuredOperation; label: string }[] = [
   { value: 'top_bottom_sections', label: 'Κορυφαίες / χαμηλότερες ενότητες' },
 ]
 
-export function QueryForm({ api, onResult, onError }: QueryFormProps) {
+const MODE_LABELS: Record<StructuredOperation, string> = {
+  get_scores: 'βαθμολογίες',
+  compare_periods: 'σύγκριση περιόδων',
+  top_bottom_sections: 'κορυφαίες / χαμηλότερες ενότητες',
+}
+
+const LABEL_CLASS = 'text-[11px] font-semibold uppercase tracking-[.6px] text-[#8b8b95]'
+
+const SELECT_CLASS =
+  'rounded-lg border py-2.5 pl-3 pr-8 text-[13px] appearance-none bg-no-repeat bg-[right_12px_center]'
+
+const CHEVRON_BG = {
+  backgroundImage:
+    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%234a4a55' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
+}
+
+export function QueryForm({ api, onResult, onError, onModeLabelChange }: QueryFormProps) {
   const [persons, setPersons] = useState<PersonOut[]>([])
   const [periods, setPeriods] = useState<string[]>([])
   const [personId, setPersonId] = useState('')
@@ -40,6 +57,10 @@ export function QueryForm({ api, onResult, onError }: QueryFormProps) {
   const [question, setQuestion] = useState('')
   const [loading, setLoading] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+
+  useEffect(() => {
+    onModeLabelChange?.(mode === 'semantic' ? 'σημασιολογική' : MODE_LABELS[operation])
+  }, [mode, operation, onModeLabelChange])
 
   useEffect(() => {
     api.getPersons().then(setPersons)
@@ -101,53 +122,65 @@ export function QueryForm({ api, onResult, onError }: QueryFormProps) {
     }
   }
 
+  const selectStyle = (value: string) => ({
+    backgroundColor: '#131318',
+    borderColor: '#26262d',
+    color: value ? '#f2f2f4' : '#6d6d78',
+    ...CHEVRON_BG,
+  })
+
+  const fieldStyle = { backgroundColor: '#131318', borderColor: '#26262d', color: '#f2f2f4' }
+
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded border border-navy/20 bg-white p-4 dark:border-gold/20 dark:bg-navy">
-      <div className="flex gap-4">
-        <label className="flex flex-1 flex-col gap-1 text-sm">
-          Άτομο
-          <select
-            aria-label="Άτομο"
-            value={personId}
-            onChange={(e) => setPersonId(e.target.value)}
-            className="rounded border border-navy/30 px-2 py-1 dark:border-gold/30 dark:bg-navy-light dark:text-white"
-          >
-            <option value="">Επιλέξτε άτομο</option>
-            {persons.map((p) => (
-              <option key={p.person_id} value={p.person_id}>
-                {p.name} ({p.person_id})
-              </option>
-            ))}
-          </select>
-        </label>
+    <form onSubmit={handleSubmit} className="flex flex-1 flex-col gap-3.5">
+      <label className="flex flex-col gap-1.5">
+        <span className={LABEL_CLASS}>Άτομο</span>
+        <select
+          aria-label="Άτομο"
+          value={personId}
+          onChange={(e) => setPersonId(e.target.value)}
+          className={SELECT_CLASS}
+          style={selectStyle(personId)}
+        >
+          <option value="">Επιλέξτε άτομο</option>
+          {persons.map((p) => (
+            <option key={p.person_id} value={p.person_id}>
+              {p.name} ({p.person_id})
+            </option>
+          ))}
+        </select>
+      </label>
 
-        <label className="flex flex-1 flex-col gap-1 text-sm">
-          Περίοδος
-          <select
-            aria-label="Περίοδος"
-            value={period}
-            onChange={(e) => setPeriod(e.target.value)}
-            disabled={!personId}
-            className="rounded border border-navy/30 px-2 py-1 dark:border-gold/30 dark:bg-navy-light dark:text-white"
-          >
-            <option value="">Επιλέξτε περίοδο</option>
-            {periods.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      <label className="flex flex-col gap-1.5">
+        <span className={LABEL_CLASS}>Περίοδος</span>
+        <select
+          aria-label="Περίοδος"
+          value={period}
+          onChange={(e) => setPeriod(e.target.value)}
+          disabled={!personId}
+          className={SELECT_CLASS}
+          style={selectStyle(period)}
+        >
+          <option value="">Επιλέξτε περίοδο</option>
+          {periods.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
+      </label>
 
-      <div className="flex gap-2" role="group" aria-label="Λειτουργία ερωτήματος">
+      <div className="flex rounded-lg border p-[3px]" style={{ backgroundColor: '#131318', borderColor: '#26262d' }} role="group" aria-label="Λειτουργία ερωτήματος">
         <button
           type="button"
           onClick={() => setMode('structured')}
           aria-pressed={mode === 'structured'}
-          className={`flex-1 rounded px-3 py-1 text-sm font-medium ${
-            mode === 'structured' ? 'bg-navy text-gold' : 'bg-navy/10 text-navy dark:bg-white/10 dark:text-white'
-          }`}
+          className="flex-1 rounded-md px-3 py-1.5 text-[12px] font-semibold"
+          style={
+            mode === 'structured'
+              ? { backgroundColor: '#26262d', color: '#f2f2f4', boxShadow: '0 1px 3px rgba(0,0,0,.4)' }
+              : { backgroundColor: 'transparent', color: '#8b8b95' }
+          }
         >
           Δομημένη
         </button>
@@ -155,23 +188,27 @@ export function QueryForm({ api, onResult, onError }: QueryFormProps) {
           type="button"
           onClick={() => setMode('semantic')}
           aria-pressed={mode === 'semantic'}
-          className={`flex-1 rounded px-3 py-1 text-sm font-medium ${
-            mode === 'semantic' ? 'bg-navy text-gold' : 'bg-navy/10 text-navy dark:bg-white/10 dark:text-white'
-          }`}
+          className="flex-1 rounded-md px-3 py-1.5 text-[12px] font-semibold"
+          style={
+            mode === 'semantic'
+              ? { backgroundColor: '#26262d', color: '#f2f2f4', boxShadow: '0 1px 3px rgba(0,0,0,.4)' }
+              : { backgroundColor: 'transparent', color: '#8b8b95' }
+          }
         >
           Σημασιολογική
         </button>
       </div>
 
       {mode === 'structured' ? (
-        <div className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1 text-sm">
-            Λειτουργία
+        <div className="flex flex-col gap-3.5">
+          <label className="flex flex-col gap-1.5">
+            <span className={LABEL_CLASS}>Λειτουργία</span>
             <select
               aria-label="Λειτουργία"
               value={operation}
               onChange={(e) => handleOperationChange(e.target.value as StructuredOperation)}
-              className="rounded border border-navy/30 px-2 py-1 dark:border-gold/30 dark:bg-navy-light dark:text-white"
+              className={SELECT_CLASS}
+              style={selectStyle(operation)}
             >
               {OPERATIONS.map((op) => (
                 <option key={op.value} value={op.value}>
@@ -182,13 +219,14 @@ export function QueryForm({ api, onResult, onError }: QueryFormProps) {
           </label>
 
           {operation === 'compare_periods' && (
-            <label className="flex flex-col gap-1 text-sm">
-              Περίοδος σύγκρισης
+            <label className="flex flex-col gap-1.5">
+              <span className={LABEL_CLASS}>Περίοδος σύγκρισης</span>
               <select
                 aria-label="Περίοδος σύγκρισης"
                 value={otherPeriod}
                 onChange={(e) => setOtherPeriod(e.target.value)}
-                className="rounded border border-navy/30 px-2 py-1 dark:border-gold/30 dark:bg-navy-light dark:text-white"
+                className={SELECT_CLASS}
+                style={selectStyle(otherPeriod)}
               >
                 <option value="">Επιλέξτε περίοδο</option>
                 {periods
@@ -203,43 +241,52 @@ export function QueryForm({ api, onResult, onError }: QueryFormProps) {
           )}
 
           {operation === 'top_bottom_sections' && (
-            <label className="flex flex-col gap-1 text-sm">
-              Αριθμός ενοτήτων (n)
+            <label className="flex flex-col gap-1.5">
+              <span className={LABEL_CLASS}>Αριθμός ενοτήτων (n)</span>
               <input
                 aria-label="Αριθμός ενοτήτων"
                 type="number"
                 min={1}
                 value={n}
                 onChange={(e) => setN(e.target.value)}
-                className="rounded border border-navy/30 px-2 py-1 dark:border-gold/30 dark:bg-navy-light dark:text-white"
+                className="rounded-lg border px-3 py-2.5 text-[13px]"
+                style={fieldStyle}
               />
             </label>
           )}
         </div>
       ) : (
-        <label className="flex flex-col gap-1 text-sm">
-          Ερώτηση
+        <label className="flex flex-col gap-1.5">
+          <span className={LABEL_CLASS}>Ερώτηση</span>
           <textarea
             aria-label="Ερώτηση"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             rows={3}
-            className="rounded border border-navy/30 px-2 py-1 dark:border-gold/30 dark:bg-navy-light dark:text-white"
+            className="rounded-lg border px-3 py-2.5 text-[13px]"
+            style={fieldStyle}
           />
           {questionTooShort && question.length > 0 && (
-            <span className="text-xs text-red-600">Η ερώτηση απαιτεί τουλάχιστον 3 χαρακτήρες</span>
+            <span className="font-mono text-[11px]" style={{ color: '#ff6b6b' }}>
+              Η ερώτηση απαιτεί τουλάχιστον 3 χαρακτήρες
+            </span>
           )}
         </label>
       )}
 
-      {formError && <p className="text-sm text-red-600">{formError}</p>}
+      {formError && (
+        <p className="text-sm" style={{ color: '#ff6b6b' }}>
+          {formError}
+        </p>
+      )}
 
       <button
         type="submit"
         disabled={!canSubmit || loading}
-        className="rounded bg-gold px-4 py-2 font-semibold text-navy disabled:cursor-not-allowed disabled:opacity-50"
+        className="mt-auto w-full rounded-lg py-3 text-[13px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+        style={{ backgroundColor: '#f2f2f4', color: '#0a0a0c' }}
       >
-        {loading ? 'Αποστολή...' : 'Υποβολή ερωτήματος'}
+        {loading ? 'Αποστολή...' : 'Υποβολή ερωτήματος ⏎'}
       </button>
     </form>
   )

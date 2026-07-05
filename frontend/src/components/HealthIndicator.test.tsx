@@ -10,7 +10,7 @@ describe('HealthIndicator', () => {
 
     render(<HealthIndicator api={api} />)
 
-    expect(await screen.findByText('Ollama διαθέσιμο')).toBeInTheDocument()
+    expect(await screen.findByText('Σύστημα ενεργό')).toBeInTheDocument()
   })
 
   it('shows the unreachable warning state when Ollama is down', async () => {

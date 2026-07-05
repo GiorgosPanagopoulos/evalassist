@@ -1,22 +1,41 @@
 @import "tailwindcss";
 
 @theme {
-  --color-navy: #1b2a4a;
-  --color-navy-light: #2a3d63;
-  --color-gold: #c9a227;
-  --color-gold-light: #e0bc4a;
-  --font-mono: ui-monospace, "SF Mono", Consolas, monospace;
+  --color-deck-bg: #0a0a0c;
+  --color-deck-panel: #0e0e11;
+  --color-deck-surface: #131318;
+  --color-deck-surface-2: #131316;
+  --color-deck-border: #232328;
+  --color-deck-divider: #1d1d22;
+  --color-deck-control-border: #26262d;
+  --color-deck-text: #f2f2f4;
+  --color-deck-muted: #8b8b95;
+  --color-deck-faint: #6d6d78;
+  --color-deck-ghost: #4a4a55;
+  --color-deck-accent: #4de3ff;
+  --color-deck-violet: #7c5cff;
+  --color-deck-green: #3fdd78;
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
 body {
   margin: 0;
-  background-color: #f4f5f7;
-  color: #1b2a4a;
+  background-color: #0a0a0c;
+  color: #f2f2f4;
+  font-family: var(--font-sans);
 }
 
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: #0f1524;
-    color: #e5e7eb;
-  }
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #4de3ff;
+  box-shadow: 0 0 0 1px rgba(77, 227, 255, 0.25);
+  outline: none;
+}
+
+button:hover:not(:disabled),
+[role="group"] button:hover:not(:disabled) {
+  filter: brightness(1.08);
+  transition: filter 120ms ease;
 }

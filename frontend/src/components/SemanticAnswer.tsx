@@ -21,12 +21,16 @@ export function SemanticAnswer({ answer, citations, auditId }: SemanticAnswerPro
       {isEmptyScope ? (
         <EmptyState />
       ) : (
-        <p className="text-sm leading-relaxed">{answer}</p>
+        <p className="text-sm leading-relaxed" style={{ color: '#f2f2f4' }}>
+          {answer}
+        </p>
       )}
 
       <div data-testid="citations" className="flex flex-wrap gap-2">
         {citations.length === 0 ? (
-          <span className="text-xs text-navy/50 dark:text-gold/50">Καμία παραπομπή</span>
+          <span className="text-xs" style={{ color: '#8b8b95' }}>
+            Καμία παραπομπή
+          </span>
         ) : (
           citations.map((citation, idx) => (
             <CitationBadge key={`${citation.doc_id}-${citation.page}-${idx}`} citation={citation} />
@@ -34,7 +38,9 @@ export function SemanticAnswer({ answer, citations, auditId }: SemanticAnswerPro
         )}
       </div>
 
-      <p className="font-mono text-xs text-navy/60 dark:text-gold/60">Καταχώρηση ελέγχου: #{auditId}</p>
+      <p className="font-mono text-xs" style={{ color: '#8b8b95' }}>
+        Καταχώρηση ελέγχου: #{auditId}
+      </p>
     </div>
   )
 }
