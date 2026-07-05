@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@theme {
+  --color-navy: #1b2a4a;
+  --color-navy-light: #2a3d63;
+  --color-gold: #c9a227;
+  --color-gold-light: #e0bc4a;
+  --font-mono: ui-monospace, "SF Mono", Consolas, monospace;
+}
+
+body {
+  margin: 0;
+  background-color: #f4f5f7;
+  color: #1b2a4a;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #0f1524;
+    color: #e5e7eb;
+  }
+}
