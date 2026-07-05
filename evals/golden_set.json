@@ -1,0 +1,101 @@
+[
+  {
+    "id": "goals_p001_2025",
+    "person_id": "P001",
+    "period": "2025",
+    "question": "Ποιοι ήταν οι στόχοι της Μαρίας για το 2025 και τους πέτυχε;",
+    "expected_doc_ids": ["P001-2025-MAIN"],
+    "expected_sections": ["Στοχοθεσία"],
+    "notes": "Isolation bait: P002-2025-MAIN has near-identical goals text in the same period."
+  },
+  {
+    "id": "leadership_p001_2025",
+    "person_id": "P001",
+    "period": "2025",
+    "question": "Πώς αξιολογήθηκε η ηγετική ικανότητα της Μαρίας το 2025;",
+    "expected_doc_ids": ["P001-2025-MAIN"],
+    "expected_sections": ["Ηγετική Ικανότητα"],
+    "notes": "Baseline recall case, same scope as goals_p001_2025 but a different section."
+  },
+  {
+    "id": "goals_p002_2025",
+    "person_id": "P002",
+    "period": "2025",
+    "question": "Πέτυχε ο Γιώργος τους στόχους του το 2025;",
+    "expected_doc_ids": ["P002-2025-MAIN"],
+    "expected_sections": ["Στοχοθεσία"],
+    "notes": "Isolation bait: P001-2025-MAIN has near-identical goals text in the same period (symmetric case of goals_p001_2025)."
+  },
+  {
+    "id": "collab_p002_2025",
+    "person_id": "P002",
+    "period": "2025",
+    "question": "Πώς συνεργάστηκε ο Γιώργος με άλλα τμήματα το 2025;",
+    "expected_doc_ids": ["P002-2025-MAIN"],
+    "expected_sections": ["Συνεργασία"],
+    "notes": "Baseline recall case."
+  },
+  {
+    "id": "goals_p001_2024",
+    "person_id": "P001",
+    "period": "2024",
+    "question": "Πέτυχε η Μαρία τους στόχους της το 2024;",
+    "expected_doc_ids": ["P001-2024-MAIN"],
+    "expected_sections": ["Στοχοθεσία"],
+    "notes": "Period isolation bait: same person as goals_p001_2025, different period. Must never return P001-2025-MAIN."
+  },
+  {
+    "id": "collab_p003_2024",
+    "person_id": "P003",
+    "period": "2024",
+    "question": "Πώς ήταν η συνεργασία της Ελένης το 2024;",
+    "expected_doc_ids": ["P003-2024-MAIN"],
+    "expected_sections": ["Συνεργασία"],
+    "notes": "Baseline recall case."
+  },
+  {
+    "id": "growth_plan_p003_2024",
+    "person_id": "P003",
+    "period": "2024",
+    "question": "Τι σχέδιο ανάπτυξης προτάθηκε για την Ελένη το 2024;",
+    "expected_doc_ids": ["P003-2024-MAIN"],
+    "expected_sections": ["Σχέδιο Ανάπτυξης"],
+    "notes": "Baseline recall case, same doc as collab_p003_2024 but a different section."
+  },
+  {
+    "id": "strengths_p004_2025",
+    "person_id": "P004",
+    "period": "2025",
+    "question": "Ποια είναι τα δυνατά σημεία του Κώστα;",
+    "expected_doc_ids": ["P004-2025-MAIN"],
+    "expected_sections": ["Δυνατά Σημεία"],
+    "notes": "Rich scope (3 documents, 6 chunks, more than TOP_K_RERANK): exercises whether reranking narrows to the right document instead of returning everything in scope."
+  },
+  {
+    "id": "improvement_p004_2025",
+    "person_id": "P004",
+    "period": "2025",
+    "question": "Ποια σημεία χρειάζονται βελτίωση για τον Κώστα;",
+    "expected_doc_ids": ["P004-2025-MAIN"],
+    "expected_sections": ["Σημεία Βελτίωσης"],
+    "notes": "Same rich scope as strengths_p004_2025, different section."
+  },
+  {
+    "id": "goals_p002_2024",
+    "person_id": "P002",
+    "period": "2024",
+    "question": "Πέτυχε ο Γιώργος τους στόχους πωλήσεων το 2024;",
+    "expected_doc_ids": ["P002-2024-MAIN"],
+    "expected_sections": ["Στοχοθεσία"],
+    "notes": "Period isolation bait: same person as goals_p002_2025, different period."
+  },
+  {
+    "id": "empty_scope_p005_2025",
+    "person_id": "P005",
+    "period": "2025",
+    "question": "Ποια ήταν η συνολική αξιολόγηση απόδοσης;",
+    "expected_doc_ids": [],
+    "expected_sections": [],
+    "notes": "Empty-scope case: no documents were seeded for P005/2025. Citations must come back empty, not an error."
+  }
+]
