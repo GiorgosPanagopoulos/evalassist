@@ -16,6 +16,7 @@ BAAI/bge-m3, ώστε το test να τρέχει γρήγορα και χωρί
 """
 
 import hashlib
+import os
 import shutil
 import sqlite3
 import sys
@@ -31,9 +32,21 @@ from app.ingestion.pipeline import run_ingestion  # noqa: E402
 from app.models.evaluation import KNOWN_SECTIONS  # noqa: E402
 
 _GREEK_FONT_CANDIDATES = [
+    # macOS
     "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
     "/System/Library/Fonts/Supplemental/Arial.ttf",
+    # Linux
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/TTF/DejaVuSans.ttf",
+    # Windows
+    "C:\\Windows\\Fonts\\arial.ttf",
+    "C:\\Windows\\Fonts\\segoeui.ttf",
 ]
+
+_env_font = os.environ.get("EVALASSIST_TEST_FONT")
+if _env_font:
+    _GREEK_FONT_CANDIDATES.insert(0, _env_font)
 
 
 class FakeEmbedder:
@@ -53,7 +66,10 @@ def _greek_font() -> str:
     for candidate in _GREEK_FONT_CANDIDATES:
         if Path(candidate).exists():
             return candidate
-    raise RuntimeError("Δεν βρέθηκε γραμματοσειρά με ελληνικά γλυφή για τη δημιουργία dummy PDF")
+    raise RuntimeError(
+        "Δεν βρέθηκε γραμματοσειρά με ελληνικά γλυφή για τη δημιουργία dummy PDF. "
+        "Ορίστε EVALASSIST_TEST_FONT με το path μιας γραμματοσειράς που έχει ελληνικά γλυφή."
+    )
 
 
 def _make_pdf(path: Path, text: str) -> None:
