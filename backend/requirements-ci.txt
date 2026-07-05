@@ -1,0 +1,14 @@
+# CI-only dependency set: exactly what the standalone test scripts and
+# evals/run_evals.py import. Deliberately excludes torch/transformers/
+# sentence-transformers: Embedder and Reranker lazy-import those only on
+# first real ML call, and every test/eval uses a Fake* stand-in instead.
+fastapi==0.139.0
+httpx==0.28.1
+pydantic==2.13.4
+pydantic-settings==2.14.2
+python-dotenv==1.2.2
+requests==2.34.2
+chromadb==1.5.9
+pymupdf==1.28.0
+pytesseract==0.3.13
+pillow==12.3.0

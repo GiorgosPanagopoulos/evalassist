@@ -68,7 +68,13 @@ def _make_chunks():
     ]
     metadatas = [
         {"doc_id": "doc1", "page": 1, "section": "Στοχοθεσία", "person_id": "p1", "period": "2025"},
-        {"doc_id": "doc1", "page": 2, "section": "Ηγετική Ικανότητα", "person_id": "p1", "period": "2025"},
+        {
+            "doc_id": "doc1",
+            "page": 2,
+            "section": "Ηγετική Ικανότητα",
+            "person_id": "p1",
+            "period": "2025",
+        },
         {"doc_id": "doc2", "page": 1, "section": "Στοχοθεσία", "person_id": "p1", "period": "2025"},
     ]
     return documents, metadatas
@@ -94,7 +100,9 @@ def test_citations_match_reranked_top_k():
     reranker = FakeReranker()
     llm = FakeLLM()
     scope = IsolationScope(person_id="p1", period="2025")
-    retriever = SemanticRetriever(embedder=FakeEmbedder(), vectorstore=vectorstore, reranker=reranker, llm=llm)
+    retriever = SemanticRetriever(
+        embedder=FakeEmbedder(), vectorstore=vectorstore, reranker=reranker, llm=llm
+    )
 
     result = retriever.query("Πώς ήταν η στοχοθεσία;", scope)
 
@@ -116,7 +124,9 @@ def test_empty_scope_skips_llm_call():
     vectorstore = FakeVectorStore([], [])
     llm = FakeLLM()
     scope = IsolationScope(person_id="ghost", period="2025")
-    retriever = SemanticRetriever(embedder=FakeEmbedder(), vectorstore=vectorstore, reranker=FakeReranker(), llm=llm)
+    retriever = SemanticRetriever(
+        embedder=FakeEmbedder(), vectorstore=vectorstore, reranker=FakeReranker(), llm=llm
+    )
 
     result = retriever.query("Ερώτημα χωρίς δεδομένα", scope)
 

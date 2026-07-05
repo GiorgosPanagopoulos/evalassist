@@ -26,9 +26,7 @@ def test_chroma_where_two_fields():
 def test_chroma_where_three_fields_with_doc_id():
     scope = IsolationScope(person_id="p1", period="2025", doc_id="doc-abc")
     where = scope.build_chroma_where()
-    assert where == {
-        "$and": [{"person_id": "p1"}, {"period": "2025"}, {"doc_id": "doc-abc"}]
-    }
+    assert where == {"$and": [{"person_id": "p1"}, {"period": "2025"}, {"doc_id": "doc-abc"}]}
 
 
 def test_sql_where_two_fields():

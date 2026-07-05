@@ -163,7 +163,9 @@ def test_llm_failure_after_retrieval_audits_retrieved_doc_ids():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        app.dependency_overrides[get_semantic_retriever] = lambda: FakeLLMFailureAfterRetrievalRetriever()
+        app.dependency_overrides[get_semantic_retriever] = lambda: (
+            FakeLLMFailureAfterRetrievalRetriever()
+        )
         client = TestClient(app)
 
         response = client.post(
@@ -191,7 +193,9 @@ def test_pre_retrieval_failure_audits_empty_doc_ids():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        app.dependency_overrides[get_semantic_retriever] = lambda: FakePreRetrievalFailureRetriever()
+        app.dependency_overrides[get_semantic_retriever] = lambda: (
+            FakePreRetrievalFailureRetriever()
+        )
         client = TestClient(app)
 
         response = client.post(

@@ -40,7 +40,9 @@ def load_prompt(name: str, version: str = "latest") -> tuple[str, str]:
     else:
         match = _VERSION_ARG_RE.match(version)
         if not match:
-            raise PromptNotFoundError(f"Μη έγκυρη μορφή version '{version}' (αναμένεται 'vN' ή 'latest')")
+            raise PromptNotFoundError(
+                f"Μη έγκυρη μορφή version '{version}' (αναμένεται 'vN' ή 'latest')"
+            )
         resolved = int(match.group(1))
         if resolved not in versions:
             raise PromptNotFoundError(f"Prompt '{name}' δεν έχει έκδοση v{resolved}")

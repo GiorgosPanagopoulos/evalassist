@@ -11,14 +11,11 @@ from pydantic import BaseModel, Field
 
 
 class SectionScore(BaseModel):
-    section: str = Field(
-        description="Τομέας αξιολόγησης, π.χ. 'Στοχοθεσία', 'Ηγετική Ικανότητα'"
-    )
+    section: str = Field(description="Τομέας αξιολόγησης, π.χ. 'Στοχοθεσία', 'Ηγετική Ικανότητα'")
     score: int = Field(ge=1, le=5, description="Βαθμολογία τομέα, κλίμακα 1-5")
     comment: Optional[str] = Field(
         default=None, description="Σχόλιο αξιολογητή για τον συγκεκριμένο τομέα"
     )
-
 
 
 # Ενδεικτικοί/προσωρινοί τομείς αξιολόγησης — single source of truth για τη
@@ -43,6 +40,4 @@ class EvaluationReport(BaseModel):
     sections: list[SectionScore] = Field(
         default_factory=list, description="Βαθμολογίες ανά τομέα αξιολόγησης"
     )
-    overall_comment: Optional[str] = Field(
-        default=None, description="Συνολικό σχόλιο αξιολογητή"
-    )
+    overall_comment: Optional[str] = Field(default=None, description="Συνολικό σχόλιο αξιολογητή")

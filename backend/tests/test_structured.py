@@ -33,7 +33,13 @@ def _make_conn() -> sqlite3.Connection:
     return conn
 
 
-def _seed_person(conn: sqlite3.Connection, person_id: str, period: str, sections: list[tuple[str, int]], doc_id: str) -> None:
+def _seed_person(
+    conn: sqlite3.Connection,
+    person_id: str,
+    period: str,
+    sections: list[tuple[str, int]],
+    doc_id: str,
+) -> None:
     repository.upsert_person(conn, person_id, "Παπαδόπουλος Γιώργος")
     eval_id = repository.upsert_evaluation(conn, person_id, period, "A", "Καλή απόδοση.")
     repository.replace_scores(

@@ -111,9 +111,13 @@ def run_all():
         _make_pdf(doc_b_path, FALLBACK_DOC_TEXT)
 
         # --- known-sections διαδρομή ---
-        result_a = run_ingestion(doc_a_path, embedder=embedder, db_path=db_path, chroma_dir=chroma_dir)
+        result_a = run_ingestion(
+            doc_a_path, embedder=embedder, db_path=db_path, chroma_dir=chroma_dir
+        )
         assert not result_a.fallback_used, "δεν αναμένονταν fallback στο doc_a"
-        assert result_a.chunk_count == 2, f"αναμένονταν 2 known-section chunks, βρέθηκαν {result_a.chunk_count}"
+        assert result_a.chunk_count == 2, (
+            f"αναμένονταν 2 known-section chunks, βρέθηκαν {result_a.chunk_count}"
+        )
         assert len(result_a.report.sections) == 2
         assert result_a.report.gnmatefsi == "A"
         assert result_a.report.person_name == "Παπαδόπουλος Γιώργος"
@@ -135,10 +139,14 @@ def run_all():
         print("OK  known-sections SQLite + ChromaDB persistence")
 
         # --- fallback διαδρομή ---
-        result_b = run_ingestion(doc_b_path, embedder=embedder, db_path=db_path, chroma_dir=chroma_dir)
+        result_b = run_ingestion(
+            doc_b_path, embedder=embedder, db_path=db_path, chroma_dir=chroma_dir
+        )
         assert result_b.fallback_used, "αναμένονταν fallback στο doc_b (άγνωστο layout)"
         # 4 blocks: το header (3 γραμμές με τα scalar labels) + 3 παράγραφοι σώματος.
-        assert result_b.chunk_count == 4, f"αναμένονταν 4 παραγράφους, βρέθηκαν {result_b.chunk_count}"
+        assert result_b.chunk_count == 4, (
+            f"αναμένονταν 4 παραγράφους, βρέθηκαν {result_b.chunk_count}"
+        )
         assert result_b.report.sections == [], "δεν αναμένονταν structured scores στο fallback doc"
         assert result_b.report.gnmatefsi == "B"
         print(f"OK  fallback extraction: {result_b.doc_id}, chunks={result_b.chunk_count}")
@@ -159,7 +167,9 @@ def run_all():
         print("OK  fallback SQLite + ChromaDB persistence (zero content loss)")
 
         # --- idempotency: re-run του ίδιου PDF ---
-        result_a2 = run_ingestion(doc_a_path, embedder=embedder, db_path=db_path, chroma_dir=chroma_dir)
+        result_a2 = run_ingestion(
+            doc_a_path, embedder=embedder, db_path=db_path, chroma_dir=chroma_dir
+        )
         assert result_a2.doc_id == result_a.doc_id, "doc_id πρέπει να είναι ντετερμινιστικό"
         _assert_sqlite_state(
             db_path,
@@ -179,7 +189,9 @@ def run_all():
             persons_count = conn.execute(
                 "SELECT COUNT(*) AS n FROM persons WHERE person_id = ?", (result_a.person_id,)
             ).fetchone()["n"]
-            assert persons_count == 1, f"idempotency: αναμένονταν 1 person row, βρέθηκαν {persons_count}"
+            assert persons_count == 1, (
+                f"idempotency: αναμένονταν 1 person row, βρέθηκαν {persons_count}"
+            )
         print("OK  idempotent re-ingestion (SQLite + ChromaDB δεν διπλασιάστηκαν)")
 
         print("\nΌλα τα tests πέρασαν.")

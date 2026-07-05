@@ -44,9 +44,7 @@ def get_scores(conn: sqlite3.Connection, scope: IsolationScope) -> StructuredRes
         "overall_comment": rows[0]["overall_comment"],
         "sections": sections,
     }
-    sources = [
-        {"doc_id": doc_id, "section": s["section"]} for s in sections for doc_id in doc_ids
-    ]
+    sources = [{"doc_id": doc_id, "section": s["section"]} for s in sections for doc_id in doc_ids]
     return StructuredResult(data=data, sources=sources, retrieved_doc_ids=doc_ids)
 
 
@@ -68,7 +66,9 @@ def compare_periods(
     return StructuredResult(data=data, sources=sources, retrieved_doc_ids=retrieved_doc_ids)
 
 
-def top_bottom_sections(conn: sqlite3.Connection, scope: IsolationScope, n: int = 3) -> StructuredResult:
+def top_bottom_sections(
+    conn: sqlite3.Connection, scope: IsolationScope, n: int = 3
+) -> StructuredResult:
     result = get_scores(conn, scope)
     sections = result.data.get("sections", [])
     ranked = sorted(sections, key=lambda s: s["score"], reverse=True)
@@ -79,4 +79,6 @@ def top_bottom_sections(conn: sqlite3.Connection, scope: IsolationScope, n: int 
         "top": ranked[:n],
         "bottom": list(reversed(ranked[-n:])) if ranked else [],
     }
-    return StructuredResult(data=data, sources=result.sources, retrieved_doc_ids=result.retrieved_doc_ids)
+    return StructuredResult(
+        data=data, sources=result.sources, retrieved_doc_ids=result.retrieved_doc_ids
+    )
