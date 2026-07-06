@@ -6,7 +6,7 @@
 
 *AI-assisted retrieval for personnel evaluation reports. Fully offline, isolation-first, human-in-the-loop.*
 
-![Python](https://img.shields.io/badge/Python-3.12-1B2A4A?style=for-the-badge&labelColor=1B2A4A&color=C9A227)
+![Python](https://img.shields.io/badge/Python-3.11%2B-1B2A4A?style=for-the-badge&labelColor=1B2A4A&color=C9A227)
 ![FastAPI](https://img.shields.io/badge/FastAPI-Backend-1B2A4A?style=for-the-badge&labelColor=1B2A4A&color=C9A227)
 ![React](https://img.shields.io/badge/React-19-1B2A4A?style=for-the-badge&labelColor=1B2A4A&color=C9A227)
 ![TypeScript](https://img.shields.io/badge/TypeScript-Frontend-1B2A4A?style=for-the-badge&labelColor=1B2A4A&color=C9A227)
@@ -22,6 +22,45 @@
 ## About
 
 EvalAssist helps evaluators inside the Hellenic Armed Forces find and verify evidence buried in long, densely written personnel evaluation reports, written in Greek, without ever sending sensitive personnel data outside the perimeter. It runs entirely offline and on-prem: the embedding model, the reranker and the language model all execute on local hardware, never a cloud API. Every retrieval, whether a deterministic lookup or a semantic RAG query, is scoped server-side in code before it reaches storage, so isolation between individuals is a structural guarantee rather than a prompt instruction. Every answer carries citations back to the exact document, page and section it came from, and every query is written to an append-only audit log. The system surfaces evidence for a human evaluator to review; it never decides anything on its own.
+
+## Technology Stack
+
+<div align="center">
+
+<table>
+<tr><td align="center" colspan="4"><b>Frontend</b></td></tr>
+<tr>
+<td align="center"><img src="https://cdn.simpleicons.org/react/61DAFB" width="48" height="48" alt="React"/><br/>React 19</td>
+<td align="center"><img src="https://cdn.simpleicons.org/typescript/3178C6" width="48" height="48" alt="TypeScript"/><br/>TypeScript</td>
+<td align="center"><img src="https://cdn.simpleicons.org/vite/646CFF" width="48" height="48" alt="Vite"/><br/>Vite</td>
+<td align="center"><img src="https://cdn.simpleicons.org/tailwindcss/06B6D4" width="48" height="48" alt="Tailwind CSS"/><br/>Tailwind v4</td>
+</tr>
+<tr><td align="center" colspan="4"><b>Backend</b></td></tr>
+<tr>
+<td align="center"><img src="https://cdn.simpleicons.org/python/3776AB" width="48" height="48" alt="Python"/><br/>Python 3.11+</td>
+<td align="center"><img src="https://cdn.simpleicons.org/fastapi/009688" width="48" height="48" alt="FastAPI"/><br/>FastAPI</td>
+<td align="center"><img src="https://cdn.simpleicons.org/langchain/1C3C3C" width="48" height="48" alt="LangChain"/><br/>LangChain</td>
+<td align="center"><img src="https://cdn.simpleicons.org/pydantic/E92063" width="48" height="48" alt="Pydantic"/><br/>Pydantic v2</td>
+</tr>
+<tr><td align="center" colspan="4"><b>ML Local</b></td></tr>
+<tr>
+<td align="center"><img src="https://cdn.simpleicons.org/huggingface/FFB000" width="48" height="48" alt="Hugging Face"/><br/>bge-m3</td>
+<td align="center"><img src="https://cdn.simpleicons.org/huggingface/FFB000" width="48" height="48" alt="Hugging Face"/><br/>bge-reranker</td>
+<td align="center"><img src="https://cdn.simpleicons.org/ollama/000000" width="48" height="48" alt="Ollama"/><br/>Ollama</td>
+<td align="center"><img src="https://cdn.simpleicons.org/qwen/615CED" width="48" height="48" alt="Qwen"/><br/>qwen2.5:14b</td>
+</tr>
+<tr><td align="center" colspan="4"><b>Data and Ingestion</b></td></tr>
+<tr>
+<td align="center"><img src="https://cdn.simpleicons.org/sqlite/003B57" width="48" height="48" alt="SQLite"/><br/>SQLite</td>
+<td align="center"><img src="https://img.shields.io/badge/ChromaDB-1B2A4A?style=for-the-badge&labelColor=1B2A4A&color=C9A227" alt="ChromaDB"/><br/>ChromaDB</td>
+<td align="center"><img src="https://img.shields.io/badge/PyMuPDF-1B2A4A?style=for-the-badge&labelColor=1B2A4A&color=C9A227" alt="PyMuPDF"/><br/>PyMuPDF</td>
+<td align="center"><img src="https://img.shields.io/badge/Tesseract-1B2A4A?style=for-the-badge&labelColor=1B2A4A&color=C9A227" alt="Tesseract"/><br/>Tesseract</td>
+</tr>
+</table>
+
+**100% ON-PREM · ZERO CLOUD DEPENDENCIES · AIR-GAPPED READY**
+
+</div>
 
 ## Features
 
@@ -65,7 +104,7 @@ graph TD
         Embedder --> Chroma1[(ChromaDB)]
     end
 
-    UI["React Frontend (Phase 5, upcoming)"] --> API["FastAPI (Phase 4, upcoming)"]
+    UI["React Frontend"] --> API["FastAPI"]
     API --> Isolation["IsolationScope"]
     Isolation --> SQL["SQLite: structured lookup"]
     Isolation --> Semantic["Semantic RAG"]
@@ -80,8 +119,9 @@ graph TD
 
 | Technology | Role |
 |---|---|
-| ![Python](https://img.shields.io/badge/Python-3.12-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | Backend language |
-| ![FastAPI](https://img.shields.io/badge/FastAPI-Phase%204-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | HTTP API layer (upcoming) |
+| ![Python](https://img.shields.io/badge/Python-3.11%2B-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | Backend language |
+| ![FastAPI](https://img.shields.io/badge/FastAPI-Backend-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | HTTP API layer, CORS, exception to HTTP status mapping |
+| ![LangChain](https://img.shields.io/badge/LangChain-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | `RecursiveCharacterTextSplitter` for per-section chunking sub-splits |
 | ![Pydantic](https://img.shields.io/badge/Pydantic-v2-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | Schema validation, `pydantic-settings` for centralized config |
 | ![SQLite](https://img.shields.io/badge/SQLite-Structured%20Store-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | persons, evaluations, scores, documents, audit_log |
 | ![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector%20Store-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | Vector store for semantic chunks |
@@ -90,20 +130,20 @@ graph TD
 | ![Ollama](https://img.shields.io/badge/Ollama-qwen2.5--14b-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | Local LLM for grounded answer generation |
 | ![PyMuPDF](https://img.shields.io/badge/PyMuPDF-Parsing-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | PDF parsing |
 | ![Tesseract](https://img.shields.io/badge/Tesseract-Greek%20OCR-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | OCR fallback for scanned pages |
-| ![React](https://img.shields.io/badge/React-19-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | Frontend (Phase 5, upcoming) |
-| ![TypeScript](https://img.shields.io/badge/TypeScript-Frontend-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | Frontend language (Phase 5, upcoming) |
-| ![Tailwind](https://img.shields.io/badge/Tailwind-v4-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | Frontend styling (Phase 5, upcoming) |
+| ![React](https://img.shields.io/badge/React-19-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | Frontend |
+| ![TypeScript](https://img.shields.io/badge/TypeScript-Frontend-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | Frontend language |
+| ![Tailwind](https://img.shields.io/badge/Tailwind-v4-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | Frontend styling |
 
 Every model in this table runs locally. No layer of the system calls a cloud API.
 
 ## Quick Start
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/GiorgosPanagopoulos/evalassist.git
 cd evalassist
 
-# 1. Backend virtual environment (Python 3.12)
-python3.12 -m venv backend/.venv
+# 1. Backend virtual environment (Python 3.11+)
+python3.11 -m venv backend/.venv
 source backend/.venv/bin/activate
 
 # 2. Install dependencies
@@ -114,6 +154,7 @@ cp backend/.env.example backend/.env
 
 # 4. Install Tesseract OCR with the Greek language pack
 brew install tesseract tesseract-lang
+# Debian/Ubuntu: sudo apt install tesseract-ocr tesseract-ocr-ell
 
 # 5. Pull the local LLM
 ollama pull qwen2.5:14b
@@ -129,21 +170,47 @@ from app.ingestion.pipeline import run_ingestion
 result = run_ingestion(Path('path/to/report.pdf'))
 print(result.doc_id, result.person_id, result.period)
 "
-
-# 8. Run the standalone test suite (no real ML models or Ollama required, fakes throughout)
-python tests/test_config.py
-python tests/test_prompt_loader.py
-python tests/test_audit.py
-python tests/test_isolation.py
-python tests/test_structured.py
-python tests/test_semantic.py
-python tests/test_chunker.py
-python tests/test_ingestion_pipeline.py
 ```
 
-### Frontend (Phase 5, upcoming)
+### Backend
 
-The frontend has not been scaffolded yet. This section will cover setup once Phase 5 lands.
+```bash
+cd backend
+uvicorn app.api.main:app --reload --port 8000
+```
+
+### Frontend
+
+```bash
+cd frontend && npm install && npm run dev
+```
+
+### Tests and evals
+
+```bash
+# Standalone backend tests (no real ML models or Ollama required, fakes throughout)
+for f in backend/tests/test_*.py; do python "$f"; done
+
+# RAG pipeline evals (isolation_leaks must be 0)
+python evals/run_evals.py
+
+# Frontend tests
+cd frontend && npm test
+```
+
+## API Reference
+
+Every endpoint is scoped through `IsolationScope` before it touches SQLite or ChromaDB, and every call, successful or not, is written to the append-only audit log. Pass the caller identity via the `X-User` header (default `anonymous`); it is recorded on the audit entry, it does not gate authorization.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/query/structured` | Deterministic SQL lookup, `get_scores`, `compare_periods` or `top_bottom_sections`, no LLM involved |
+| POST | `/query/semantic` | Semantic RAG query: embed the question, retrieve from ChromaDB, rerank, generate a grounded, cited answer |
+| GET | `/persons` | List all persons (`person_id`, `name`), unscoped, used to populate pickers |
+| GET | `/persons/{person_id}/periods` | List evaluation periods available for a given person |
+| GET | `/health` | Service health, including whether the local Ollama server is reachable |
+
+Domain exceptions are mapped to HTTP status codes centrally in `app/api/main.py`: `NotFoundError` becomes 404, `IsolationError` becomes 400, `LLMUnavailableError` becomes 503.
 
 ## Environment Variables
 
@@ -160,19 +227,29 @@ All keys below live in `backend/.env.example`. Copy it to `backend/.env` and ove
 | `OLLAMA_MODEL` | Ollama model tag used for generation | No | `qwen2.5:14b` |
 | `TOP_K_RETRIEVE` | Chunks retrieved from ChromaDB before reranking | No | `20` |
 | `TOP_K_RERANK` | Chunks kept after reranking, passed to the LLM | No | `5` |
-| `ALLOWED_ORIGINS` | CORS origins allowed by the API (Phase 4) | No | `["http://localhost:5173"]` |
+| `ALLOWED_ORIGINS` | CORS origins allowed by the API | No | `["http://localhost:5173"]` |
 
 ## Project Structure
 
 ```
 evalassist/
+  .github/
+    workflows/
+      ci.yml                     backend tests + RAG evals + frontend build/test
+  .pre-commit-config.yaml         ruff lint/format (backend), oxlint + tsc (frontend)
   backend/
     app/
+      api/
+        main.py                  FastAPI app factory, CORS, exception to HTTP mapping
+        routes_query.py           /query/structured, /query/semantic
+        routes_meta.py            /persons, /persons/{person_id}/periods, /health
+        schemas.py                request/response models
+        deps.py                   DB connection + retriever dependencies
       core/
         config.py           centralized settings (pydantic-settings)
         audit.py             AuditEntry, write_audit
         prompt_loader.py     versioned prompt loading (prompts/<name>/vN.txt)
-        exceptions.py        domain exceptions (HTTP mapping in Phase 4)
+        exceptions.py        domain exceptions (NotFoundError, IsolationError, LLMUnavailableError)
       prompts/
         semantic_rag/
           v1.txt              semantic RAG system prompt
@@ -200,7 +277,17 @@ evalassist/
     tests/                          standalone tests, no real ML models or Ollama required
     .env.example
     requirements.txt
-  frontend/                        React 19 + TypeScript + Vite + Tailwind v4 (Phase 5)
+    requirements-ci.txt           CI-only subset, excludes torch/transformers/sentence-transformers
+  frontend/                        React 19 + TypeScript + Vite + Tailwind v4
+    src/
+      api/                         client.ts, types.ts, typed fetch wrapper for the backend API
+      components/                  QueryForm, ResultsPanel, SemanticAnswer, CitationBadge, HealthIndicator
+      test/                        vitest setup
+      App.tsx
+      main.tsx
+  evals/
+    run_evals.py                   RAG pipeline eval harness, isolation_leaks must be 0
+    golden_set.json                 golden query/citation set
 ```
 
 ## Why EvalAssist?
@@ -213,6 +300,7 @@ evalassist/
 | File-based prompt versioning | Prompts live as files under `prompts/<name>/vN.txt`, resolved deterministically, so every answer can be traced to the exact prompt version used |
 | Local-only models | Embedding, reranking and generation all run on local hardware; no request ever leaves the perimeter |
 | `FakeEmbedder` test pattern | Tests substitute lightweight fakes for real ML models, so the suite runs in seconds without downloading multi-gigabyte weights |
+| `isolation_leaks = 0` enforced in CI | `evals/run_evals.py` fails the build if any retrieved chunk crosses a person/period boundary; a CI gate, not a suggestion |
 
 ## Roadmap
 
@@ -222,9 +310,9 @@ evalassist/
 | 2 | Ingestion pipeline: parser, OCR, chunker, extractor, embedder, vectorstore | Complete (4 tests) |
 | 3 | Retrieval layer: isolation, structured SQL lookups, semantic RAG, citations | Complete (11 tests) |
 | Refactor | Core module (config, audit, prompt versioning, exceptions), README upgrade | Complete (8 tests) |
-| 4 | FastAPI service layer, audit log persistence, HTTP error mapping | Upcoming |
-| 5 | React frontend | Upcoming |
-| Future | `document_qa` mode, explicit objectives/duties fields, golden set evals | Planned |
+| 4 | FastAPI service layer, audit log persistence, HTTP error mapping | Complete |
+| 5 | React frontend, golden set evals, pre-commit, CI | Complete |
+| Future | `document_qa` mode, explicit objectives/duties fields | Planned |
 
 ## License
 
