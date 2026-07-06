@@ -23,7 +23,7 @@
 
 EvalAssist helps evaluators inside the Hellenic Armed Forces find and verify evidence buried in long, densely written personnel evaluation reports, written in Greek, without ever sending sensitive personnel data outside the perimeter. It runs entirely offline and on-prem: the embedding model, the reranker and the language model all execute on local hardware, never a cloud API. Every retrieval, whether a deterministic lookup or a semantic RAG query, is scoped server-side in code before it reaches storage, so isolation between individuals is a structural guarantee rather than a prompt instruction. Every answer carries citations back to the exact document, page and section it came from, and every query is written to an append-only audit log. The system surfaces evidence for a human evaluator to review; it never decides anything on its own.
 
-## Technology Stack
+## Architecture
 
 <div align="center">
 
@@ -91,7 +91,7 @@ EvalAssist helps evaluators inside the Hellenic Armed Forces find and verify evi
 
 *(fictional data, for illustration only)*
 
-## Architecture
+## Tech Stack
 
 ```mermaid
 graph TD
