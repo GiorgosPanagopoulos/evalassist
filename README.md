@@ -134,6 +134,9 @@ graph TD
 
 Every model in this table runs locally. No layer of the system calls a cloud API.
 
+---
+
+
 ## Quick Start
 
 ```bash
