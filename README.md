@@ -115,7 +115,7 @@ graph TD
     LLM --> Citations
 ```
 
-## Tech Stack
+## Architecture
 
 | Technology | Role |
 |---|---|
