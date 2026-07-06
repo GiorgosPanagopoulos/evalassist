@@ -62,6 +62,28 @@ EvalAssist helps evaluators inside the Hellenic Armed Forces find and verify evi
 
 </div>
 
+```mermaid
+graph TD
+    subgraph Ingestion Pipeline
+        PDF[PDF Report] --> Parser["Parser: PyMuPDF + OCR fallback"]
+        Parser --> Chunker["Chunker: per-section"]
+        Chunker --> Extractor["Extractor: structured fields"]
+        Extractor --> SQLite1[(SQLite)]
+        Chunker --> Embedder["Embedder: bge-m3"]
+        Embedder --> Chroma1[(ChromaDB)]
+    end
+
+    UI["React Frontend"] --> API["FastAPI"]
+    API --> Isolation["IsolationScope"]
+    Isolation --> SQL["SQLite: structured lookup"]
+    Isolation --> Semantic["Semantic RAG"]
+    Semantic --> Chroma2[(ChromaDB)]
+    Chroma2 --> Reranker["Reranker: bge-reranker-v2-m3"]
+    Reranker --> LLM["Ollama: qwen2.5:14b"]
+    SQL --> Citations["Citations + Audit Log"]
+    LLM --> Citations
+```
+
 ## Features
 
 | | Feature | Description |
@@ -92,30 +114,6 @@ EvalAssist helps evaluators inside the Hellenic Armed Forces find and verify evi
 *(fictional data, for illustration only)*
 
 ## Tech Stack
-
-```mermaid
-graph TD
-    subgraph Ingestion Pipeline
-        PDF[PDF Report] --> Parser["Parser: PyMuPDF + OCR fallback"]
-        Parser --> Chunker["Chunker: per-section"]
-        Chunker --> Extractor["Extractor: structured fields"]
-        Extractor --> SQLite1[(SQLite)]
-        Chunker --> Embedder["Embedder: bge-m3"]
-        Embedder --> Chroma1[(ChromaDB)]
-    end
-
-    UI["React Frontend"] --> API["FastAPI"]
-    API --> Isolation["IsolationScope"]
-    Isolation --> SQL["SQLite: structured lookup"]
-    Isolation --> Semantic["Semantic RAG"]
-    Semantic --> Chroma2[(ChromaDB)]
-    Chroma2 --> Reranker["Reranker: bge-reranker-v2-m3"]
-    Reranker --> LLM["Ollama: qwen2.5:14b"]
-    SQL --> Citations["Citations + Audit Log"]
-    LLM --> Citations
-```
-
-## Architecture
 
 | Technology | Role |
 |---|---|
