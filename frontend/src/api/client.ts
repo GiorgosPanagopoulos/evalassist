@@ -29,7 +29,7 @@ export class ApiClient {
 
   constructor(baseUrl?: string, fetchFn: FetchFn = fetch) {
     this.baseUrl = baseUrl ?? import.meta.env.VITE_API_URL ?? DEFAULT_BASE_URL
-    this.fetchFn = fetchFn
+    this.fetchFn = fetchFn === globalThis.fetch ? fetchFn.bind(globalThis) : fetchFn
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {

@@ -106,4 +106,25 @@ describe('ApiClient', () => {
 
     await expect(client.getHealth()).rejects.toMatchObject({ status: 503, detail: 'LLM μη διαθέσιμο' })
   })
+
+  it('calls the default fetch without Illegal invocation when no fetchFn is injected', async () => {
+    const nativeLikeFetch = vi.fn(function (this: unknown) {
+      if (this !== globalThis) {
+        throw new TypeError('Illegal invocation')
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ status: 'ok', ollama_reachable: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+    vi.stubGlobal('fetch', nativeLikeFetch)
+
+    const client = new ApiClient(BASE_URL)
+
+    await expect(client.getHealth()).resolves.toEqual({ status: 'ok', ollama_reachable: true })
+
+    vi.unstubAllGlobals()
+  })
 })
