@@ -7,6 +7,7 @@ import os
 import sqlite3
 import sys
 import tempfile
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -17,6 +18,27 @@ from app.api.main import app  # noqa: E402
 from app.core.config import Settings, get_settings  # noqa: E402
 from app.db import repository  # noqa: E402
 from app.db.database import init_db  # noqa: E402
+from app.models.evaluation import EvaluationEntry, EvaluatorInfo  # noqa: E402
+
+
+def _entry(year: int) -> EvaluationEntry:
+    return EvaluationEntry(
+        period_start=date(year, 1, 1),
+        period_end=date(year, 12, 31),
+        characterization="ΕΞΑΙΡΕΤΟΣ",
+        score=90,
+        ea_type="Ε.Α.",
+        unit="Φ/Γ ΣΥΝΘΕΤΙΚΟ",
+        duties=["Κυβερνήτης"],
+        rank_at_time="Πλωτάρχης",
+        evaluator=EvaluatorInfo(rank="Πλοίαρχος", name="Ιωάννης Καραγιάννης", role="Διοικητής"),
+        gnomatevon=None,
+        defects=None,
+        evaluator_notes="Καλή απόδοση.",
+        gnomatevon_notes=None,
+        field_scores=[],
+        source_page=8,
+    )
 
 
 def _make_temp_db() -> Path:
@@ -28,10 +50,10 @@ def _make_temp_db() -> Path:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     repository.upsert_person(conn, "p1", "Παπαδόπουλος Γιώργος")
-    repository.upsert_evaluation(conn, "p1", "2024", "A", None)
-    repository.upsert_evaluation(conn, "p1", "2025", "A", None)
+    repository.upsert_evaluation(conn, "p1", _entry(2024))
+    repository.upsert_evaluation(conn, "p1", _entry(2025))
     repository.upsert_person(conn, "p2", "Ιωάννου Μαρία")
-    repository.upsert_evaluation(conn, "p2", "2025", "B", None)
+    repository.upsert_evaluation(conn, "p2", _entry(2025))
     conn.commit()
     conn.close()
     return db_path
@@ -74,7 +96,7 @@ def test_list_periods_for_person():
         response = client.get("/persons/p1/periods")
 
         assert response.status_code == 200
-        assert response.json() == ["2024", "2025"]
+        assert response.json() == [_entry(2024).period, _entry(2025).period]
     finally:
         _clear_overrides()
         os.remove(db_path)

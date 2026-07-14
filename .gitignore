@@ -17,6 +17,9 @@ backend/chroma_db/
 # Ingested source PDFs
 data/raw_pdfs/
 
+# Generated synthetic PDFs (deterministic, regenerable από fixtures/synthetic_ground_truth.json)
+fixtures/synthetic_pdfs/
+
 # Env
 .env
 .env.local

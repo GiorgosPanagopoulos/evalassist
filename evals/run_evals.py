@@ -40,6 +40,7 @@ sys.path.insert(0, str(BACKEND_DIR))
 from app.db import repository  # noqa: E402
 from app.db.database import get_connection, init_db  # noqa: E402
 from app.ingestion.vectorstore import add_chunks, get_collection  # noqa: E402
+from app.models.evaluation import EvaluationEntry, EvaluatorInfo  # noqa: E402
 from app.retrieval.isolation import IsolationScope  # noqa: E402
 from app.retrieval.semantic import SemanticRetriever  # noqa: E402
 
@@ -47,6 +48,43 @@ GOLDEN_SET_PATH = Path(__file__).resolve().parent / "golden_set.json"
 
 EMBED_DIM = 256
 STEM_LEN = 6
+
+# Period ranges (νέο schema: 'YYYY-MM-DD..YYYY-MM-DD', η σύμβαση 'career' είναι
+# για career-wide ενότητες — δεν χρειάζεται εδώ, κάθε corpus doc ανήκει σε μία
+# συγκεκριμένη ετήσια περίοδο αξιολόγησης).
+PERIOD_2025 = "2025-01-01..2025-12-31"
+PERIOD_2024 = "2024-01-01..2024-12-31"
+
+# Μεταδεδομένα evaluation ανά (person_id, period) -> ένα evaluations row.
+# Score 0-100 (νέα κλίμακα). Δεν ελέγχονται από τα evals metrics (recall/
+# precision/leaks αφορούν μόνο τη retrieval pipeline), απλώς χρειάζονται
+# valid τιμές για να περάσουν τα pydantic/SQLite constraints.
+EVALUATION_META = {
+    ("P001", PERIOD_2025): dict(
+        characterization="ΛΙΑΝ ΚΑΛΟΣ", score=82, ea_type="Ε.Α.", unit="1η Μοίρα",
+        evaluator_name="Ταξίαρχος Α. Παπαδάκης",
+    ),
+    ("P001", PERIOD_2024): dict(
+        characterization="ΚΑΛΟΣ", score=68, ea_type="Ε.Α.", unit="1η Μοίρα",
+        evaluator_name="Ταξίαρχος Α. Παπαδάκης",
+    ),
+    ("P002", PERIOD_2025): dict(
+        characterization="ΛΙΑΝ ΚΑΛΟΣ", score=80, ea_type="Ε.Α.", unit="2η Μοίρα",
+        evaluator_name="Συνταγματάρχης Β. Νικολαΐδης",
+    ),
+    ("P002", PERIOD_2024): dict(
+        characterization="ΕΞΑΙΡΕΤΟΣ", score=93, ea_type="Ε.Α.", unit="2η Μοίρα",
+        evaluator_name="Συνταγματάρχης Β. Νικολαΐδης",
+    ),
+    ("P003", PERIOD_2024): dict(
+        characterization="ΚΑΛΟΣ", score=71, ea_type="Ε.Α.", unit="3η Μοίρα",
+        evaluator_name="Ταξίαρχος Γ. Ιωαννίδης",
+    ),
+    ("P004", PERIOD_2025): dict(
+        characterization="ΚΑΛΟΣ", score=65, ea_type="Ε.Α.", unit="4η Μοίρα",
+        evaluator_name="Συνταγματάρχης Δ. Χατζής",
+    ),
+}
 
 # Synthetic corpus: one entry per document, each with its own chunks
 # (page, section, text). Covers every golden_set.json case, including
@@ -57,7 +95,7 @@ CORPUS_DOCS = [
         "doc_id": "P001-2025-MAIN",
         "person_id": "P001",
         "person_name": "Μαρία Παπαδοπούλου",
-        "period": "2025",
+        "period": PERIOD_2025,
         "chunks": [
             {
                 "page": 1,
@@ -81,7 +119,7 @@ CORPUS_DOCS = [
         "doc_id": "P001-2025-PEER",
         "person_id": "P001",
         "person_name": "Μαρία Παπαδοπούλου",
-        "period": "2025",
+        "period": PERIOD_2025,
         "chunks": [
             {
                 "page": 1,
@@ -97,7 +135,7 @@ CORPUS_DOCS = [
         "doc_id": "P002-2025-MAIN",
         "person_id": "P002",
         "person_name": "Γιώργος Νικολάου",
-        "period": "2025",
+        "period": PERIOD_2025,
         "chunks": [
             {
                 "page": 1,
@@ -118,7 +156,7 @@ CORPUS_DOCS = [
         "doc_id": "P001-2024-MAIN",
         "person_id": "P001",
         "person_name": "Μαρία Παπαδοπούλου",
-        "period": "2024",
+        "period": PERIOD_2024,
         "chunks": [
             {
                 "page": 1,
@@ -131,7 +169,7 @@ CORPUS_DOCS = [
         "doc_id": "P003-2024-MAIN",
         "person_id": "P003",
         "person_name": "Ελένη Κωνσταντίνου",
-        "period": "2024",
+        "period": PERIOD_2024,
         "chunks": [
             {
                 "page": 1,
@@ -152,7 +190,7 @@ CORPUS_DOCS = [
         "doc_id": "P004-2025-MAIN",
         "person_id": "P004",
         "person_name": "Κώστας Δημητρίου",
-        "period": "2025",
+        "period": PERIOD_2025,
         "chunks": [
             {
                 "page": 1,
@@ -178,7 +216,7 @@ CORPUS_DOCS = [
         "doc_id": "P004-2025-PEER",
         "person_id": "P004",
         "person_name": "Κώστας Δημητρίου",
-        "period": "2025",
+        "period": PERIOD_2025,
         "chunks": [
             {
                 "page": 1,
@@ -191,7 +229,7 @@ CORPUS_DOCS = [
         "doc_id": "P004-2025-SELF",
         "person_id": "P004",
         "person_name": "Κώστας Δημητρίου",
-        "period": "2025",
+        "period": PERIOD_2025,
         "chunks": [
             {
                 "page": 1,
@@ -209,7 +247,7 @@ CORPUS_DOCS = [
         "doc_id": "P002-2024-MAIN",
         "person_id": "P002",
         "person_name": "Γιώργος Νικολάου",
-        "period": "2024",
+        "period": PERIOD_2024,
         "chunks": [
             {
                 "page": 1,
@@ -302,7 +340,19 @@ def _seed(db_path: Path, chroma_dir: Path):
             seen_persons.add(doc["person_id"])
         eval_key = (doc["person_id"], doc["period"])
         if eval_key not in seen_evals:
-            repository.upsert_evaluation(conn, doc["person_id"], doc["period"], "A", None)
+            meta = EVALUATION_META[eval_key]
+            period_start, period_end = doc["period"].split("..")
+            entry = EvaluationEntry(
+                period_start=period_start,
+                period_end=period_end,
+                characterization=meta["characterization"],
+                score=meta["score"],
+                ea_type=meta["ea_type"],
+                unit=meta["unit"],
+                evaluator=EvaluatorInfo(name=meta["evaluator_name"]),
+                source_page=1,
+            )
+            repository.upsert_evaluation(conn, doc["person_id"], entry)
             seen_evals.add(eval_key)
         repository.upsert_document(
             conn, doc["doc_id"], doc["person_id"], doc["period"], "synthetic", len(doc["chunks"])

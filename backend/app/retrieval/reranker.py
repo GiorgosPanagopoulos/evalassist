@@ -15,8 +15,9 @@ MODEL_NAME = get_settings().RERANKER_MODEL
 
 
 class Reranker:
-    def __init__(self, model_name: str = MODEL_NAME):
+    def __init__(self, model_name: str = MODEL_NAME, device: str | None = None):
         self.model_name = model_name
+        self.device = device  # None -> αφήνει το sentence-transformers να διαλέξει (auto)
         self._model: "CrossEncoder | None" = None
 
     @property
@@ -24,7 +25,7 @@ class Reranker:
         if self._model is None:
             from sentence_transformers import CrossEncoder
 
-            self._model = CrossEncoder(self.model_name)
+            self._model = CrossEncoder(self.model_name, device=self.device)
         return self._model
 
     def rerank(self, query: str, docs: list[str], top_k: int = 5) -> list[tuple[int, float]]:

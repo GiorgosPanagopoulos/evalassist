@@ -1,8 +1,9 @@
 """ChromaDB collection για τα chunks.
 
-Metadata schema έτοιμο για το isolation filter της Φάσης 3 (where σε
-person_id + period): κάθε chunk αποθηκεύεται με person_id, person_name,
-period, gnmatefsi, section, score, doc_id, page, fallback.
+Metadata schema έτοιμο για το isolation filter (where σε person_id +
+period): κάθε chunk αποθηκεύεται με person_id, person_name, period,
+section, score, doc_id, page. period='career' για ενότητες που δεν
+ανήκουν σε συγκεκριμένη περίοδο αξιολόγησης (βλ. app.ingestion.pipeline).
 """
 
 from pathlib import Path

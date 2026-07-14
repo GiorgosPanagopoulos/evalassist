@@ -1,8 +1,9 @@
-"""Mini test/sample flow για το POST /query/structured (Φάση 4).
+"""Mini test/sample flow για το POST /query/structured πάνω στο schema
+Περιληπτικού Σημειώματος.
 
 Καλύπτει, πάνω σε temp file-based SQLite (ίδιο schema με production, 2
-persons x 2 periods seeded):
-  - σωστά scores για τον scoped person/period.
+persons x 1 evaluation period seeded):
+  - σωστά στοιχεία για τον scoped person/period.
   - τα δεδομένα άλλου person δεν διαρρέουν ποτέ στην απάντηση.
   - γράφεται ακριβώς μία γραμμή audit_log με mode="structured".
   - μη έγκυρος συνδυασμός operation/πεδίων -> 422.
@@ -15,6 +16,7 @@ import os
 import sqlite3
 import sys
 import tempfile
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -25,7 +27,29 @@ from app.api.main import app  # noqa: E402
 from app.core.config import Settings, get_settings  # noqa: E402
 from app.db import repository  # noqa: E402
 from app.db.database import init_db  # noqa: E402
-from app.models.evaluation import SectionScore  # noqa: E402
+from app.models.evaluation import EvaluationEntry, EvaluatorInfo, FieldScore  # noqa: E402
+
+PERIOD = "2025-01-01..2025-12-31"
+
+
+def _entry(score: int, characterization: str) -> EvaluationEntry:
+    return EvaluationEntry(
+        period_start=date(2025, 1, 1),
+        period_end=date(2025, 12, 31),
+        characterization=characterization,
+        score=score,
+        ea_type="Ε.Α.",
+        unit="Φ/Γ ΣΥΝΘΕΤΙΚΟ",
+        duties=["Κυβερνήτης"],
+        rank_at_time="Πλωτάρχης",
+        evaluator=EvaluatorInfo(rank="Πλοίαρχος", name="Ιωάννης Καραγιάννης", role="Διοικητής"),
+        gnomatevon=None,
+        defects=None,
+        evaluator_notes="Καλή απόδοση.",
+        gnomatevon_notes=None,
+        field_scores=[FieldScore(field_code="141", value=score)],
+        source_page=8,
+    )
 
 
 def _make_temp_db() -> Path:
@@ -37,18 +61,16 @@ def _make_temp_db() -> Path:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     repository.upsert_person(conn, "p1", "Παπαδόπουλος Γιώργος")
-    eval_id = repository.upsert_evaluation(conn, "p1", "2025", "A", "Καλή απόδοση.")
-    repository.replace_scores(
-        conn, eval_id, [SectionScore(section="Στοχοθεσία", score=4, comment=None)]
-    )
-    repository.upsert_document(conn, "doc-p1", "p1", "2025", "/docs/doc-p1.pdf", 2)
+    entry1 = _entry(score=96, characterization="ΕΞΑΙΡΕΤΟΣ")
+    eval_id = repository.upsert_evaluation(conn, "p1", entry1)
+    repository.replace_field_scores(conn, eval_id, entry1.field_scores)
+    repository.upsert_document(conn, "doc-p1", "p1", entry1.period, "/docs/doc-p1.pdf", 8)
 
     repository.upsert_person(conn, "p2", "Ιωάννου Μαρία")
-    eval_id2 = repository.upsert_evaluation(conn, "p2", "2025", "B", "Άριστη απόδοση.")
-    repository.replace_scores(
-        conn, eval_id2, [SectionScore(section="Στοχοθεσία", score=2, comment=None)]
-    )
-    repository.upsert_document(conn, "doc-p2", "p2", "2025", "/docs/doc-p2.pdf", 1)
+    entry2 = _entry(score=55, characterization="ΜΕΤΡΙΟΣ")
+    eval_id2 = repository.upsert_evaluation(conn, "p2", entry2)
+    repository.replace_field_scores(conn, eval_id2, entry2.field_scores)
+    repository.upsert_document(conn, "doc-p2", "p2", entry2.period, "/docs/doc-p2.pdf", 8)
     conn.commit()
     conn.close()
     return db_path
@@ -79,12 +101,13 @@ def test_get_scores_scoped_to_person_and_period():
 
         response = client.post(
             "/query/structured",
-            json={"person_id": "p1", "period": "2025", "operation": "get_scores"},
+            json={"person_id": "p1", "period": PERIOD, "operation": "get_scores"},
         )
 
         assert response.status_code == 200
         body = response.json()
-        assert body["result"]["data"]["gnmatefsi"] == "A"
+        assert body["result"]["data"]["characterization"] == "ΕΞΑΙΡΕΤΟΣ"
+        assert body["result"]["data"]["score"] == 96
         assert body["result"]["retrieved_doc_ids"] == ["doc-p1"]
         assert isinstance(body["audit_id"], int)
     finally:
@@ -100,14 +123,13 @@ def test_other_person_data_never_leaks():
 
         response = client.post(
             "/query/structured",
-            json={"person_id": "p1", "period": "2025", "operation": "get_scores"},
+            json={"person_id": "p1", "period": PERIOD, "operation": "get_scores"},
         )
 
         body = response.json()
         assert "doc-p2" not in body["result"]["retrieved_doc_ids"]
-        assert body["result"]["data"]["gnmatefsi"] != "B"
-        for section in body["result"]["data"]["sections"]:
-            assert section["score"] != 2  # p2's score, must not appear for p1
+        assert body["result"]["data"]["score"] != 55  # p2's score, must not appear for p1
+        assert body["result"]["data"]["characterization"] != "ΜΕΤΡΙΟΣ"
     finally:
         _clear_overrides()
         os.remove(db_path)
@@ -121,7 +143,7 @@ def test_audit_row_written_with_structured_mode():
 
         response = client.post(
             "/query/structured",
-            json={"person_id": "p1", "period": "2025", "operation": "top_bottom_sections", "n": 1},
+            json={"person_id": "p1", "period": PERIOD, "operation": "top_bottom_sections", "n": 1},
         )
         audit_id = response.json()["audit_id"]
 
@@ -143,7 +165,7 @@ def test_invalid_operation_field_combo_is_422():
         # compare_periods χωρίς other_period -> μη έγκυρος συνδυασμός
         response = client.post(
             "/query/structured",
-            json={"person_id": "p1", "period": "2025", "operation": "compare_periods"},
+            json={"person_id": "p1", "period": PERIOD, "operation": "compare_periods"},
         )
 
         assert response.status_code == 422

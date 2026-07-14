@@ -1,38 +1,50 @@
-"""Ingestion pipeline: PDF -> parsing (+OCR) -> per-section chunking ->
-δομημένη εξαγωγή -> persistence (SQLite + ChromaDB).
+"""Ingestion pipeline: PDF -> parsing (+OCR) -> per-section εντοπισμός ->
+δομημένη εξαγωγή (SummaryNote) -> persistence (SQLite + ChromaDB).
 
 Idempotent σε doc_id: re-run του ίδιου PDF (ίδιο περιεχόμενο) ενημερώνει τις
 υπάρχουσες εγγραφές/chunks αντί να τις διπλασιάζει.
+
+1 PDF = 1 άτομο (Α.Γ.Μ. = person_id), N περίοδοι αξιολόγησης (Ε.Α./Σ.Α.):
+κάθε EvaluationEntry της Ενότητας 7 γίνεται ξεχωριστή εγγραφή στο
+`evaluations` (period = 'YYYY-MM-DD..YYYY-MM-DD') και ξεχωριστό chunk στο
+Chroma, με το πραγματικό κείμενο της περιόδου (όχι synthesized). Οι
+υπόλοιπες (career-wide, όχι per-period) ενότητες περνάνε με τη σύμβαση
+period='career' — τεκμηρίωση της σύμβασης, single source of truth εδώ.
 """
 
 import hashlib
 import logging
-import re
-import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
 from app.db import repository
 from app.db.database import DB_PATH, get_connection, init_db
-from app.ingestion.chunker import PageText, chunk_by_section
+from app.ingestion.chunker import PageText, chunk_by_section, split_text_if_long
 from app.ingestion.embedder import Embedder
-from app.ingestion.extractor import extract_report
+from app.ingestion.extractor import extract_summary_note
 from app.ingestion.parser import parse_pdf
 from app.ingestion.vectorstore import CHROMA_DIR, add_chunks, delete_by_doc_id, get_collection
-from app.models.evaluation import EvaluationReport
+from app.models.evaluation import KNOWN_SECTIONS, SummaryNote
 
 logger = logging.getLogger(__name__)
+
+# Σύμβαση period για ενότητες που δεν ανήκουν σε συγκεκριμένη περίοδο
+# αξιολόγησης (πτυχία, τοποθετήσεις, χρόνος υπηρεσίας, κρίσεις προαγωγών,
+# στοιχεία συνηγορούντα/μη, γενική ικανότητα) — αφορούν όλη τη σταδιοδρομία.
+CAREER_PERIOD = "career"
+
+_EVALUATION_SECTION = KNOWN_SECTIONS[-1]  # "ΣΥΝΟΛΙΚΗ ΕΜΦΑΝΙΣΗ - ΧΑΡΑΚΤΗΡΙΣΜΟΣ"
 
 
 @dataclass
 class IngestionResult:
     doc_id: str
     person_id: str
-    period: str
+    periods: list[str]  # όλα τα period values που καταχωρήθηκαν (evaluations + 'career')
     page_count: int
     chunk_count: int
     fallback_used: bool
-    report: EvaluationReport
+    summary_note: SummaryNote
 
 
 def compute_doc_id(pdf_path: Path) -> str:
@@ -40,12 +52,6 @@ def compute_doc_id(pdf_path: Path) -> str:
     Ίδιο PDF -> ίδιο doc_id -> idempotent re-ingestion."""
     digest = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
     return digest[:16]
-
-
-def _slugify(value: str) -> str:
-    normalized = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode()
-    slug = re.sub(r"[^a-zA-Z0-9]+", "-", normalized).strip("-").lower()
-    return slug or hashlib.sha256(value.encode()).hexdigest()[:12]
 
 
 def run_ingestion(
@@ -64,21 +70,60 @@ def run_ingestion(
 
     section_chunks = chunk_by_section(pages, doc_id)
     fallback_used = bool(section_chunks) and section_chunks[0].fallback
-    report = extract_report(full_text, section_chunks)
+    summary_note, eval_raw_texts = extract_summary_note(full_text, section_chunks)
 
-    person_id = report.person_id or _slugify(report.person_name)
+    person_id = summary_note.person.agm
+
+    periods: list[str] = []
+    chunk_texts: list[str] = []
+    chunk_metas: list[dict] = []
+
+    def add_chunk(text: str, period: str, section: str, page: int, score: int = -1) -> None:
+        for piece in split_text_if_long(text):
+            chunk_texts.append(piece)
+            chunk_metas.append(
+                {
+                    "person_id": person_id,
+                    "person_name": summary_note.person.name,
+                    "period": period,
+                    "section": section,
+                    "score": score,
+                    "doc_id": doc_id,
+                    "page": page,
+                }
+            )
 
     init_db(db_path)
     conn = get_connection(db_path)
     try:
-        repository.upsert_person(conn, person_id, report.person_name)
-        eval_id = repository.upsert_evaluation(
-            conn, person_id, report.period, report.gnmatefsi, report.overall_comment
-        )
-        repository.replace_scores(conn, eval_id, report.sections)
-        repository.upsert_document(
-            conn, doc_id, person_id, report.period, str(pdf_path), len(pages)
-        )
+        repository.upsert_person(conn, person_id, summary_note.person.name)
+
+        for entry, raw_text in zip(summary_note.evaluations, eval_raw_texts):
+            eval_id = repository.upsert_evaluation(conn, person_id, entry)
+            repository.replace_field_scores(conn, eval_id, entry.field_scores)
+            repository.upsert_document(
+                conn, doc_id, person_id, entry.period, str(pdf_path), len(pages)
+            )
+            periods.append(entry.period)
+            add_chunk(
+                raw_text,
+                entry.period,
+                _EVALUATION_SECTION,
+                entry.source_page,
+                score=entry.score if entry.score is not None else -1,
+            )
+
+        career_chunks = [c for c in section_chunks if c.section != _EVALUATION_SECTION]
+        if career_chunks:
+            repository.upsert_document(
+                conn, doc_id, person_id, CAREER_PERIOD, str(pdf_path), len(pages)
+            )
+            periods.append(CAREER_PERIOD)
+            for chunk in career_chunks:
+                add_chunk(
+                    chunk.text, CAREER_PERIOD, chunk.section or "Άγνωστη Ενότητα", chunk.page
+                )
+
         conn.commit()
     finally:
         conn.close()
@@ -86,32 +131,16 @@ def run_ingestion(
     collection = get_collection(chroma_dir)
     delete_by_doc_id(collection, doc_id)  # idempotency: καθαρισμός παλιάς εκδοχής
 
-    ids, documents, metadatas = [], [], []
-    for i, chunk in enumerate(section_chunks):
-        ids.append(f"{doc_id}:{i}")
-        documents.append(chunk.text)
-        metadatas.append(
-            {
-                "person_id": person_id,
-                "person_name": report.person_name,
-                "period": report.period,
-                "gnmatefsi": report.gnmatefsi,
-                "section": chunk.section or "Άγνωστη Ενότητα",
-                "score": chunk.score if chunk.score is not None else -1,
-                "doc_id": doc_id,
-                "page": chunk.page,
-                "fallback": chunk.fallback,
-            }
-        )
-    embeddings = embedder.embed(documents)
-    add_chunks(collection, ids, documents, embeddings, metadatas)
+    ids = [f"{doc_id}:{i}" for i in range(len(chunk_texts))]
+    embeddings = embedder.embed(chunk_texts)
+    add_chunks(collection, ids, chunk_texts, embeddings, chunk_metas)
 
     return IngestionResult(
         doc_id=doc_id,
         person_id=person_id,
-        period=report.period,
+        periods=sorted(set(periods)),
         page_count=len(pages),
-        chunk_count=len(section_chunks),
+        chunk_count=len(chunk_texts),
         fallback_used=fallback_used,
-        report=report,
+        summary_note=summary_note,
     )

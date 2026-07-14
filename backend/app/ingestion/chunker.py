@@ -2,8 +2,13 @@
 
 Section detection είναι config-driven: τα αναμενόμενα ονόματα τομέων
 αντλούνται αποκλειστικά από `app.models.evaluation.KNOWN_SECTIONS` (single
-source of truth, δίπλα στο EvaluationReport schema) και εντοπίζονται στο
-κείμενο με fuzzy matching — καμία σταθερά section header δεν υπάρχει εδώ.
+source of truth, δίπλα στο SummaryNote schema — οι 7 ενότητες του
+Περιληπτικού Σημειώματος) και εντοπίζονται στο κείμενο με fuzzy matching —
+καμία σταθερά section header δεν υπάρχει εδώ.
+
+Section detection είναι ανά σελίδα: αν μια ενότητα συνεχίζεται σε νέα
+σελίδα, η επικεφαλίδα της πρέπει να επαναλαμβάνεται εκεί (σύμβαση που
+ακολουθεί και ο synthetic PDF generator) ώστε να μη χαθεί περιεχόμενο.
 
 Αν ένα PDF δεν έχει καμία αναγνωρίσιμη ενότητα (άγνωστο layout, θόρυβος OCR),
 το chunking πέφτει σε structural fallback (chunking ανά παράγραφο/σελίδα) ώστε
@@ -19,14 +24,6 @@ from app.models.evaluation import KNOWN_SECTIONS
 
 _FUZZY_THRESHOLD = 0.72
 _MAX_HEADER_LINE_LEN = 80
-
-# Score πρέπει να συνοδεύεται είτε από λέξη-κλειδί είτε από μορφή "X/5" —
-# αποφεύγει false positives σε τυχαία ψηφία (π.χ. αριθμό σελίδας).
-_SCORE_RE = re.compile(
-    r"(?:Βαθμολογία|Score)\s*[:\-]?\s*([1-5])(?:\s*/\s*5)?"
-    r"|\(?\b([1-5])\s*/\s*5\)?",
-    re.IGNORECASE,
-)
 
 MAX_CHUNK_CHARS = 1500
 _sub_splitter = None  # lazy: αποφεύγει το βαρύ (torch/transformers) import chain
@@ -53,7 +50,6 @@ class SectionChunk:
     doc_id: str
     page: int
     section: str | None  # None => structural fallback chunk (άγνωστη ενότητα)
-    score: int | None
     text: str
     fallback: bool = False
 
@@ -96,14 +92,6 @@ def _find_known_section_boundaries(page_text: str) -> list[tuple[int, str]]:
     return boundaries
 
 
-def _extract_score(text: str) -> int | None:
-    match = _SCORE_RE.search(text)
-    if not match:
-        return None
-    value = match.group(1) or match.group(2)
-    return int(value) if value else None
-
-
 def _known_section_chunks(pages: list[PageText], doc_id: str) -> list[SectionChunk]:
     chunks: list[SectionChunk] = []
     for page in pages:
@@ -118,7 +106,6 @@ def _known_section_chunks(pages: list[PageText], doc_id: str) -> list[SectionChu
                     doc_id=doc_id,
                     page=page.page,
                     section=section_name,
-                    score=_extract_score(body),
                     text=body,
                     fallback=False,
                 )
@@ -140,7 +127,6 @@ def _structural_fallback_chunks(pages: list[PageText], doc_id: str) -> list[Sect
                     doc_id=doc_id,
                     page=page.page,
                     section=None,
-                    score=None,
                     text=paragraph,
                     fallback=True,
                 )
@@ -148,19 +134,21 @@ def _structural_fallback_chunks(pages: list[PageText], doc_id: str) -> list[Sect
     return chunks
 
 
+def split_text_if_long(text: str) -> list[str]:
+    if len(text) <= MAX_CHUNK_CHARS:
+        return [text]
+    return _get_sub_splitter().split_text(text)
+
+
 def _split_long_chunks(chunks: list[SectionChunk]) -> list[SectionChunk]:
     result: list[SectionChunk] = []
     for chunk in chunks:
-        if len(chunk.text) <= MAX_CHUNK_CHARS:
-            result.append(chunk)
-            continue
-        for piece in _get_sub_splitter().split_text(chunk.text):
+        for piece in split_text_if_long(chunk.text):
             result.append(
                 SectionChunk(
                     doc_id=chunk.doc_id,
                     page=chunk.page,
                     section=chunk.section,
-                    score=chunk.score,
                     text=piece,
                     fallback=chunk.fallback,
                 )
