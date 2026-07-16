@@ -33,3 +33,4 @@ frontend/.vite/
 .DS_Store
 .vscode/
 .idea/
+private/
