@@ -113,12 +113,61 @@ def test_evaluation_section_spans_multiple_entries_in_one_chunk():
     assert "01/01/2024" in chunks[0].text
 
 
+def test_page_without_header_inherits_active_section_from_previous_page():
+    # Πραγματικό PDF layout: section header μόνο στην πρώτη σελίδα της
+    # ενότητας· οι επόμενες σελίδες συνεχίζουν χωρίς επανάληψη του header
+    # (αντίθετα με τη σύμβαση του synthetic generator). Χωρίς carry-forward,
+    # το περιεχόμενο της 2ης σελίδας θα χανόταν εντελώς (Bug 2a).
+    section = KNOWN_SECTIONS[6]
+    page1_text = f"{section}\nΠερίοδος: 01/01/2023 - 31/12/2023\nΧαρακτηρισμός: ΕΞΑΙΡΕΤΟΣ (100)\n"
+    page2_text = "Περίοδος: 01/01/2022 - 31/12/2022\nΧαρακτηρισμός: ΚΑΛΟΣ (70)\n"
+    pages = [PageText(page=1, text=page1_text), PageText(page=2, text=page2_text)]
+
+    chunks = chunk_by_section(pages, DOC_ID)
+
+    assert not any(c.fallback for c in chunks), "δεν αναμένεται fallback εδώ"
+    page2_chunks = [c for c in chunks if c.page == 2]
+    assert page2_chunks, "η σελίδα 2 (χωρίς header) δεν πρέπει να χαθεί"
+    assert all(c.section == section for c in page2_chunks), (
+        "η σελίδα 2 πρέπει να κληρονομήσει την ενεργή ενότητα της σελίδας 1"
+    )
+    assert "01/01/2022" in "\n".join(c.text for c in page2_chunks)
+
+
+def test_legend_substring_does_not_trigger_false_positive_boundary():
+    # Bug 2b: μια γραμμή-legend/σύνοψη ΜΕΣΑ σε μια ενότητα μπορεί να αναφέρει
+    # (ως substring) το πλήρες title μιας ΑΛΛΗΣ ενότητας, χωρίς η ίδια να
+    # είναι header γραμμή (δεν ξεκινά με αρίθμηση, ούτε είναι ολόκληρη η
+    # γραμμή το title). Αυτό ΔΕΝ πρέπει να σπάσει το chunk σε ψευδές section.
+    section = KNOWN_SECTIONS[6]
+    other_title = KNOWN_SECTIONS[5]
+    legend_line = f"Δείτε στην ενότητα {other_title} παραπάνω."
+    page_text = (
+        f"{section}\n"
+        f"{legend_line}\n"
+        "Περίοδος: 01/01/2023 - 31/12/2023\n"
+        "Χαρακτηρισμός: ΕΞΑΙΡΕΤΟΣ (100)\n"
+    )
+    pages = [PageText(page=1, text=page_text)]
+
+    chunks = chunk_by_section(pages, DOC_ID)
+
+    assert len(chunks) == 1, (
+        f"η γραμμή legend δεν πρέπει να σπάσει το chunk σε δεύτερο section, βρέθηκαν {len(chunks)}"
+    )
+    assert chunks[0].section == section
+    assert legend_line in chunks[0].text
+    assert "01/01/2023" in chunks[0].text
+
+
 def run_all():
     tests = [
         test_known_sections_are_detected_via_fuzzy_match,
         test_unknown_layout_falls_back_to_structural_chunking_without_data_loss,
         test_partial_known_sections_do_not_trigger_fallback,
         test_evaluation_section_spans_multiple_entries_in_one_chunk,
+        test_page_without_header_inherits_active_section_from_previous_page,
+        test_legend_substring_does_not_trigger_false_positive_boundary,
     ]
     for test in tests:
         test()

@@ -30,7 +30,7 @@ KNOWN_SECTIONS: list[str] = [
     "ΣΥΝΟΛΙΚΗ ΕΜΦΑΝΙΣΗ - ΧΑΡΑΚΤΗΡΙΣΜΟΣ",
 ]
 
-CHARACTERIZATIONS: list[str] = ["ΕΞΑΙΡΕΤΟΣ", "ΛΙΑΝ ΚΑΛΟΣ", "ΚΑΛΟΣ", "ΜΕΤΡΙΟΣ", "ΜΗ ΑΠΟΔΕΚΤΟΣ"]
+CHARACTERIZATIONS: list[str] = ["ΕΞΑΙΡΕΤΟΣ", "ΛΙΑΝ ΚΑΛΟΣ", "ΚΑΛΟΣ", "ΜΕΤΡΙΟΣ", "ΜΗ ΑΠΟΔΕΚΤΟΣ", "ΔΥ"]
 
 # Περιγραφές των αναλυτικών πεδίων (ΠΕΔΙΟ/ΠΕΡΙΓΡΑΦΗ/ΒΑΘΜΟΛΟΓΙΑ) της
 # Ενότητας 7. Οι κωδικοί/περιγραφές είναι ενδεικτικοί — δεν αντιστοιχούν σε
@@ -120,7 +120,7 @@ class EvaluatorInfo(BaseModel):
 class EvaluationEntry(BaseModel):
     period_start: datetime.date
     period_end: datetime.date
-    characterization: Literal["ΕΞΑΙΡΕΤΟΣ", "ΛΙΑΝ ΚΑΛΟΣ", "ΚΑΛΟΣ", "ΜΕΤΡΙΟΣ", "ΜΗ ΑΠΟΔΕΚΤΟΣ"]
+    characterization: Literal["ΕΞΑΙΡΕΤΟΣ", "ΛΙΑΝ ΚΑΛΟΣ", "ΚΑΛΟΣ", "ΜΕΤΡΙΟΣ", "ΜΗ ΑΠΟΔΕΚΤΟΣ", "ΔΥ"]
     score: Optional[int] = Field(default=None, ge=0, le=100)
     ea_type: Literal["Ε.Α.", "Σ.Α."]
     unit: str

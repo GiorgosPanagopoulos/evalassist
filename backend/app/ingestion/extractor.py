@@ -23,11 +23,13 @@ pipeline το χρησιμοποιεί ως κείμενο chunk για το Chr
 semantic retrieval να αναζητά στην πραγματική διατύπωση του εγγράφου.
 """
 
+import bisect
 import re
 from datetime import date
 
 from app.ingestion.chunker import SectionChunk
 from app.models.evaluation import (
+    CHARACTERIZATIONS,
     DegreeEntry,
     EvaluationEntry,
     EvaluatorInfo,
@@ -65,9 +67,35 @@ _FIELD_SCORE_RE = re.compile(
 _FIELD_STOP_LOOKAHEAD = r"\n[Α-Ωα-ωΆ-Ϋά-ώA-Za-z][^\n:]{0,40}:\s|\n[ \t]*\n"
 
 
+_LABEL_SPLIT_RE = re.compile(r"(\s*/\s*|\s+)")
+
+
+def _label_pattern(label: str) -> str:
+    """Whitespace-tolerant regex fragment για ένα label: προαιρετικά κενά γύρω
+    από "/" σε σύνθετες ετικέτες (π.χ. "Όπλο/Σώμα" ταιριάζει και με "Όπλο /
+    Σώμα" στο πραγματικό PDF), και ανεκτικό σε μεταβλητό πλήθος κενών ανάμεσα
+    σε λέξεις (π.χ. "Οικογ. Κατάσταση" ταιριάζει και με πολλαπλά κενά) — το
+    \\s* πριν το ':' προστίθεται χωριστά από κάθε caller (βλ. _field,
+    _iter_pipe_rows). Σπάει το label σε tokens γύρω από "/" και whitespace
+    ΠΡΙΝ το `re.escape` κάθε literal κομμάτι: το `re.escape` στη σύγχρονη
+    Python κάνει escape το κενό (σε "\\ "), οπότε ένα naive
+    `re.escape(label).replace(" ", r"\\s+")` θα άφηνε ένα ορφανό "\\" πριν
+    το "\\s+" — εξ ου και το split σε tokens αντί για replace πάνω στο ήδη
+    escaped string."""
+    parts = []
+    for token in _LABEL_SPLIT_RE.split(label):
+        if not token:
+            continue
+        if _LABEL_SPLIT_RE.fullmatch(token):
+            parts.append(r"\s*/\s*" if "/" in token else r"\s+")
+        else:
+            parts.append(re.escape(token))
+    return "".join(parts)
+
+
 def _field(text: str, label: str) -> str | None:
     pattern = re.compile(
-        rf"^{re.escape(label)}:\s*(.+?)(?={_FIELD_STOP_LOOKAHEAD}|\Z)",
+        rf"^{_label_pattern(label)}\s*:\s*(.+?)(?={_FIELD_STOP_LOOKAHEAD}|\Z)",
         re.MULTILINE | re.DOTALL,
     )
     match = pattern.search(text)
@@ -91,29 +119,60 @@ def _parse_int(raw: str | None) -> int | None:
     return int(raw) if raw is not None and raw.strip().isdigit() else None
 
 
-def _iter_pipe_rows(text: str, first_label: str) -> list[dict[str, str]]:
-    """Κάθε εγγραφή πίνακα "Ετικέτα: τιμή | Ετικέτα: τιμή | ..." -> dict.
+_LABEL_VALUE_LINE_RE = re.compile(r"^\s*([Α-Ωα-ωΆ-Ϋά-ώA-Za-z][^\n:]{0,60}?)\s*:\s*(.*)$")
 
-    Οι εγγραφές οριοθετούνται από τη γραμμή που ξεκινάει με `first_label:`
-    (το πρώτο πεδίο κάθε γραμμής πίνακα) αντί για literal γραμμή-ανά-εγγραφή:
-    ανθεκτικό σε αναδίπλωση (wrap) μιας μακριάς τιμής σε >1 οπτικές γραμμές
-    μέσα στο PDF (π.χ. μεγάλη περιγραφή στην Ενότητα 5).
+
+def _parse_pipe_row(block_text: str) -> dict[str, str]:
+    joined = " ".join(block_text.splitlines())
+    row: dict[str, str] = {}
+    for segment in joined.split("|"):
+        if ":" not in segment:
+            continue
+        label, value = segment.split(":", 1)
+        row[label.strip()] = value.strip()
+    return row
+
+
+def _parse_label_value_lines(block_text: str) -> dict[str, str]:
+    """Fallback χωρίς "|": ομαδοποιεί διαδοχικές γραμμές "Ετικέτα: τιμή"
+    (whitespace-tolerant, βλ. _label_pattern) σε ένα row."""
+    row: dict[str, str] = {}
+    for line in block_text.splitlines():
+        match = _LABEL_VALUE_LINE_RE.match(line)
+        if not match:
+            continue
+        label, value = match.group(1).strip(), match.group(2).strip()
+        if label:
+            row[label] = value
+    return row
+
+
+def _iter_pipe_rows(text: str, first_label: str) -> list[dict[str, str]]:
+    """Κάθε εγγραφή πίνακα -> dict, σε δύο πιθανές μορφές:
+      1. "Ετικέτα: τιμή | Ετικέτα: τιμή | ..." (μία γραμμή ανά εγγραφή).
+      2. Χωρίς "|": διαδοχικές γραμμές "Ετικέτα: τιμή" (μία ετικέτα ανά
+         γραμμή) μέχρι την επόμενη εγγραφή.
+
+    Και στις δύο περιπτώσεις, οι εγγραφές οριοθετούνται από τη γραμμή που
+    ξεκινάει με `first_label:` (το πρώτο πεδίο κάθε εγγραφής) αντί για literal
+    γραμμή-ανά-εγγραφή: ανθεκτικό σε αναδίπλωση (wrap) μιας μακριάς τιμής σε
+    >1 οπτικές γραμμές μέσα στο PDF (π.χ. μεγάλη περιγραφή στην Ενότητα 5).
     """
-    boundary_re = re.compile(rf"^{re.escape(first_label)}:", re.MULTILINE)
+    boundary_re = re.compile(rf"^{_label_pattern(first_label)}\s*:", re.MULTILINE)
     starts = [m.start() for m in boundary_re.finditer(text)]
     rows: list[dict[str, str]] = []
     for i, start in enumerate(starts):
         end = starts[i + 1] if i + 1 < len(starts) else len(text)
-        block = " ".join(text[start:end].strip().splitlines())
-        row: dict[str, str] = {}
-        for segment in block.split("|"):
-            if ":" not in segment:
-                continue
-            label, value = segment.split(":", 1)
-            row[label.strip()] = value.strip()
+        block_text = text[start:end].strip()
+        row = _parse_pipe_row(block_text) if "|" in block_text else _parse_label_value_lines(block_text)
         if row:
             rows.append(row)
     return rows
+
+
+def _first_known_section_index(text: str, start: int = 0) -> int:
+    indices = [idx for name in KNOWN_SECTIONS if (idx := text.find(name, start)) != -1]
+    return min(indices) if indices else -1
 
 
 def _header_block(full_text: str) -> str:
@@ -122,15 +181,20 @@ def _header_block(full_text: str) -> str:
 
 
 def _person_block(full_text: str) -> str:
+    """Το τμήμα κειμένου με τα ΣΤΟΙΧΕΙΑ ΑΤΟΜΟΥ, δύο μορφές:
+      1. Υπάρχει literal marker "ΣΤΟΙΧΕΙΑ ΑΤΟΜΟΥ" (synthetic PDFs, βλ.
+         scripts/generate_synthetic_pdfs.py): το block ξεκινάει εκεί και
+         τελειώνει στην πρώτη γνωστή ενότητα μετά.
+      2. Χωρίς τον marker (πραγματικό PDF — δεν τον περιέχει καθόλου, τα
+         PersonInfo πεδία εμφανίζονται ελεύθερα στη σελίδα 1): fallback σε
+         ΟΛΟ το κείμενο πριν την πρώτη γνωστή ενότητα, ώστε τα labels να
+         αναζητηθούν ανεξαρτήτως ορίου marker (A6)."""
     start = full_text.find(_PERSON_BLOCK_MARKER)
     if start == -1:
-        return ""
-    end = len(full_text)
-    for name in KNOWN_SECTIONS:
-        idx = full_text.find(name, start + len(_PERSON_BLOCK_MARKER))
-        if idx != -1:
-            end = min(end, idx)
-    return full_text[start:end]
+        end = _first_known_section_index(full_text)
+        return full_text if end == -1 else full_text[:end]
+    end = _first_known_section_index(full_text, start + len(_PERSON_BLOCK_MARKER))
+    return full_text[start:] if end == -1 else full_text[start:end]
 
 
 def _parse_person(full_text: str) -> PersonInfo:
@@ -143,7 +207,7 @@ def _parse_person(full_text: str) -> PersonInfo:
         rank=_field(block, "Βαθμός"),
         corps=_field(block, "Όπλο/Σώμα"),
         service=_field(block, "Υπηρεσία"),
-        family_status=_field(block, "Οικογενειακή Κατάσταση"),
+        family_status=_field(block, "Οικογενειακή Κατάσταση") or _field(block, "Οικογ. Κατάσταση"),
         age=_parse_int(_field(block, "Ηλικία")),
         special_training=_field(block, "Ειδική Εκπαίδευση"),
     )
@@ -245,15 +309,173 @@ def _parse_field_scores(block: str) -> list[FieldScore]:
     return scores
 
 
-def _split_evaluation_blocks(text: str) -> list[tuple[str, str, str]]:
-    """[(period_start_raw, period_end_raw, block_text), ...] μέσα σε ένα
-    (ενδεχομένως πολυσέλιδο) κείμενο της Ενότητας 7."""
+def _split_evaluation_blocks(text: str) -> list[tuple[str, str, str, int]]:
+    """[(period_start_raw, period_end_raw, block_text, start_offset), ...]
+    μέσα σε ένα (ενδεχομένως πολυσέλιδο) κείμενο της Ενότητας 7 — labeled
+    μορφή ("Περίοδος: ..." boundary)."""
     matches = list(_PERIOD_HEADER_RE.finditer(text))
     blocks = []
     for i, match in enumerate(matches):
         end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-        blocks.append((match.group(1), match.group(2), text[match.start() : end].strip()))
+        blocks.append(
+            (match.group(1), match.group(2), text[match.start() : end].strip(), match.start())
+        )
     return blocks
+
+
+_BARE_ANCHOR_RE = re.compile(r"^(Ε\.Α\.|Σ\.Α\.)\s*$", re.MULTILINE)
+_DATE_TOKEN_RE = re.compile(r"^\d{2}/\d{2}/\d{4}$")
+_EVALUATOR_LABEL_RE = re.compile(r"^Αξιολογών\s*:\s*(.*)$")
+
+# Font substitution σε πραγματικά PDF: κάποιοι Έλληνικοί χαρακτήρες
+# εμφανίζονται ως λατινικά ομόγραφα (π.χ. "EΞΑΙΡΕΤΟΣ" με λατινικό "E").
+# Απαραίτητο για να αναγνωριστεί ο χαρακτηρισμός έναντι του CHARACTERIZATIONS.
+_LATIN_TO_GREEK_UPPER = str.maketrans(
+    {
+        "A": "Α", "B": "Β", "E": "Ε", "Z": "Ζ", "H": "Η", "I": "Ι", "K": "Κ",
+        "M": "Μ", "N": "Ν", "O": "Ο", "P": "Ρ", "T": "Τ", "Y": "Υ", "X": "Χ",
+    }
+)
+
+
+def _split_positional_blocks(text: str) -> list[tuple[str, str, int]]:
+    """[(ea_type, block_text, start_offset), ...] — fallback χωρίς labels
+    (πραγματικό PDF layout): κάθε bare γραμμή "Ε.Α."/"Σ.Α." (ολόκληρη γραμμή,
+    όχι substring — δεν μπερδεύεται με τη legend "α. Χαρακτηρισμός από Ε.Α. /
+    Σ.Α. ...") είναι το anchor μιας εγγραφής, τα υπόλοιπα πεδία εξάγονται
+    θεσιακά (βλ. _parse_evaluation_entry_positional)."""
+    anchors = list(_BARE_ANCHOR_RE.finditer(text))
+    blocks = []
+    for i, match in enumerate(anchors):
+        end = anchors[i + 1].start() if i + 1 < len(anchors) else len(text)
+        blocks.append((match.group(1), text[match.start() : end], match.start()))
+    return blocks
+
+
+def _parse_evaluator_fallback(raw: str | None) -> EvaluatorInfo | None:
+    """Real-PDF μορφή αξιολογούντος: "ΒΑΘΜΟΣ   Ονοματεπώνυμο - Ρόλος" (όχι
+    comma-separated όπως στη labeled μορφή, βλ. _parse_evaluator)."""
+    if not raw:
+        return None
+    raw = raw.strip()
+    if not raw:
+        return None
+    if " - " in raw:
+        left, role = raw.rsplit(" - ", 1)
+        role = role.strip() or None
+    else:
+        left, role = raw, None
+    parts = left.split(None, 1)
+    rank, name = (parts[0], parts[1].strip()) if len(parts) == 2 else (None, left.strip())
+    return EvaluatorInfo(rank=rank, name=name, role=role) if name else None
+
+
+def _parse_characterization_token(raw: str | None) -> tuple[str | None, int | None]:
+    """Χαρακτηρισμός+βαθμολογία σε μία γραμμή, real-PDF μορφή (π.χ.
+    "EΞΑΙΡΕΤΟΣ (100)"). Καλύπτει και bare "ΔΥ" (Σ.Α. περιόδους χωρίς
+    αριθμητική βαθμολογία — score παραμένει None) αφού είναι μέλος του
+    CHARACTERIZATIONS (single source of truth, βλ. models/evaluation.py).
+    Επιστρέφει (None, None) μόνο αν δεν αντιστοιχεί σε κανέναν γνωστό
+    χαρακτηρισμό — ο caller παραλείπει τέτοιες (πραγματικά άγνωστες)
+    εγγραφές αντί να επινοήσει τιμή εκτός Literal."""
+    if not raw:
+        return None, None
+    match = _CHARACTERIZATION_RE.match(raw.strip())
+    text, score = (match.group(1).strip(), int(match.group(2))) if match else (raw.strip(), None)
+    normalized = text.translate(_LATIN_TO_GREEK_UPPER)
+    return (normalized, score) if normalized in CHARACTERIZATIONS else (None, None)
+
+
+def _parse_field_scores_positional(block: str) -> list[FieldScore]:
+    """Fallback χωρίς "ΠΕΔΙΟ: .. | ΠΕΡΙΓΡΑΦΗ: .. | ΒΑΘΜΟΛΟΓΙΑ: .." labels:
+    σαρώνει τις γραμμές του block για bare κωδικούς πεδίου (γνωστοί από
+    FIELD_CODE_LABELS, single source of truth) — κάθε match ακολουθείται από
+    1+ γραμμές περιγραφής (πιθανό wrap) και μία γραμμή βαθμολογίας (αριθμός ή
+    ΝΑΙ/ΟΧΙ)."""
+    lines = block.splitlines()
+    scores: list[FieldScore] = []
+    i, n = 0, len(lines)
+    while i < n:
+        token = lines[i].strip()
+        if token in FIELD_CODE_LABELS:
+            code = token
+            i += 1
+            desc_lines: list[str] = []
+            value = None
+            while i < n:
+                candidate = lines[i].strip()
+                i += 1
+                if not candidate:
+                    continue
+                if candidate.isdigit() or candidate in ("ΝΑΙ", "ΟΧΙ"):
+                    value = candidate
+                    break
+                desc_lines.append(candidate)
+            if value is not None:
+                scores.append(
+                    FieldScore(
+                        field_code=code,
+                        description=" ".join(desc_lines) or FIELD_CODE_LABELS.get(code),
+                        value=_coerce_field_value(value),
+                    )
+                )
+        else:
+            i += 1
+    return scores
+
+
+def _parse_evaluation_entry_positional(ea_type: str, block: str, page: int) -> EvaluationEntry | None:
+    """Θεσιακός (positional) parser για entries χωρίς labels (πραγματικό PDF
+    layout, σελ. 4-8 του δείγματος): "Ε.Α./Σ.Α." anchor, μετά ημερομηνία /
+    "-" / ημερομηνία, μετά "Χαρακτηρισμός (βαθμός)" σε μία γραμμή (ή bare
+    "ΔΥ" χωρίς βαθμό, βλ. _parse_characterization_token), μετά
+    μονάδα/καθήκοντα σε ελεύθερες γραμμές, μετά "Αξιολογών:" + η γραμμή με το
+    ονοματεπώνυμο. Επιστρέφει None αν δεν αναγνωρίζεται έγκυρη περίοδος ή
+    χαρακτηρισμός εκτός CHARACTERIZATIONS — τέτοιες (πραγματικά άγνωστες)
+    εγγραφές παραλείπονται αντί να επινοηθεί μη-πραγματική τιμή."""
+    lines = [line.strip() for line in block.splitlines() if line.strip()]
+    if not lines:
+        return None
+    idx = 1  # lines[0] == το ίδιο το anchor ("Ε.Α."/"Σ.Α.")
+
+    def _take() -> str | None:
+        nonlocal idx
+        if idx >= len(lines):
+            return None
+        value = lines[idx]
+        idx += 1
+        return value
+
+    d1, dash, d2 = _take(), _take(), _take()
+    if not (d1 and _DATE_TOKEN_RE.match(d1) and dash == "-" and d2 and _DATE_TOKEN_RE.match(d2)):
+        return None
+
+    characterization, score = _parse_characterization_token(_take())
+    if characterization is None:
+        return None
+
+    rest = lines[idx:]
+    evaluator_idx = next((i for i, l in enumerate(rest) if _EVALUATOR_LABEL_RE.match(l)), len(rest))
+    unit_lines = [l for l in rest[:evaluator_idx] if l != "-" and not l.isdigit()]
+    unit = unit_lines[0] if unit_lines else ""
+
+    evaluator_raw = None
+    if evaluator_idx < len(rest):
+        inline = _EVALUATOR_LABEL_RE.match(rest[evaluator_idx]).group(1).strip()
+        evaluator_raw = inline or (rest[evaluator_idx + 1] if evaluator_idx + 1 < len(rest) else None)
+    evaluator = _parse_evaluator_fallback(evaluator_raw) or EvaluatorInfo(name="")
+
+    return EvaluationEntry(
+        period_start=_parse_date(d1),
+        period_end=_parse_date(d2),
+        characterization=characterization,
+        score=score,
+        ea_type=ea_type,
+        unit=unit,
+        evaluator=evaluator,
+        field_scores=_parse_field_scores_positional(block),
+        source_page=page,
+    )
 
 
 def _parse_evaluation_entry(
@@ -289,6 +511,27 @@ def _parse_evaluation_entry(
     )
 
 
+def _concat_with_offsets(chunks: list[SectionChunk]) -> tuple[str, list[int], list[int]]:
+    """Ενώνει τα per-page chunks μιας ενότητας σε ένα κείμενο, κρατώντας
+    (starts, pages) ώστε να ανακτάται ποια αρχική σελίδα αντιστοιχεί σε κάθε
+    offset — χρειάζεται στο πραγματικό PDF, όπου μια εγγραφή (σημειώσεις,
+    field scores) μπορεί να συνεχίζεται πάνω από page break χωρίς να
+    επαναλαμβάνεται το section header (βλ. chunker._known_section_chunks)."""
+    parts, starts, pages = [], [], []
+    pos = 0
+    for chunk in chunks:
+        starts.append(pos)
+        pages.append(chunk.page)
+        parts.append(chunk.text)
+        pos += len(chunk.text) + 1  # +1: "\n" separator στο join
+    return "\n".join(parts), starts, pages
+
+
+def _page_for_offset(starts: list[int], pages: list[int], offset: int) -> int:
+    i = bisect.bisect_right(starts, offset) - 1
+    return pages[max(0, min(i, len(pages) - 1))]
+
+
 def extract_summary_note(
     full_text: str, section_chunks: list[SectionChunk]
 ) -> tuple[SummaryNote, list[str]]:
@@ -302,14 +545,23 @@ def extract_summary_note(
     def joined(section_name: str) -> str:
         return "\n".join(c.text for c in by_section.get(section_name, []))
 
+    eval_text, eval_starts, eval_pages = _concat_with_offsets(by_section.get(_EVALUATION_SECTION, []))
+
     evaluations: list[EvaluationEntry] = []
     raw_texts: list[str] = []
-    for chunk in by_section.get(_EVALUATION_SECTION, []):
-        for period_start_raw, period_end_raw, block in _split_evaluation_blocks(chunk.text):
-            evaluations.append(
-                _parse_evaluation_entry(period_start_raw, period_end_raw, block, chunk.page)
-            )
+    labeled_blocks = _split_evaluation_blocks(eval_text)
+    if labeled_blocks:
+        for period_start_raw, period_end_raw, block, start in labeled_blocks:
+            page = _page_for_offset(eval_starts, eval_pages, start)
+            evaluations.append(_parse_evaluation_entry(period_start_raw, period_end_raw, block, page))
             raw_texts.append(block)
+    else:
+        for ea_type, block, start in _split_positional_blocks(eval_text):
+            page = _page_for_offset(eval_starts, eval_pages, start)
+            entry = _parse_evaluation_entry_positional(ea_type, block, page)
+            if entry is not None:
+                evaluations.append(entry)
+                raw_texts.append(block.strip())
 
     summary_note = SummaryNote(
         person=_parse_person(full_text),

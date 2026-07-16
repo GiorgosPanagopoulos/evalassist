@@ -22,9 +22,20 @@ class ParsedPage:
 def _extract_text_blocks(page: fitz.Page) -> str:
     """Κείμενο ανά block (παράγραφος/στήλη κειμένου), ενωμένο με κενή γραμμή
     ανάμεσα σε blocks — διατηρεί τα παραγραφικά όρια που χρειάζεται ο chunker
-    (known-section headers ανά γραμμή, structural fallback ανά παράγραφο)."""
+    (known-section headers ανά γραμμή, structural fallback ανά παράγραφο).
+
+    Τα blocks ταξινομούνται κατά (y0, x0): η σειρά επιστροφής του
+    `page.get_text("blocks")` ακολουθεί τη σειρά εισαγωγής στο content stream
+    του PDF, όχι απαραίτητα την οπτική σειρά ανάγνωσης — σε πραγματικά
+    πολυστηλα layouts (π.χ. ΣΤΟΙΧΕΙΑ ΑΤΟΜΟΥ δίπλα-δίπλα με άλλο block, ή δύο
+    ενότητες στην ίδια σελίδα με μπερδεμένη σειρά blocks) αυτό μπορεί να
+    αναδιατάξει το κείμενο έτσι ώστε μεταγενέστερο περιεχόμενο να εμφανίζεται
+    πριν από προγενέστερο. Η ταξινόμηση κατά γραμμή/στήλη αποκαθιστά τη σωστή
+    σειρά ανάγνωσης."""
     blocks = page.get_text("blocks")
-    paragraphs = [b[4].strip() for b in blocks if b[6] == 0 and b[4].strip()]
+    text_blocks = [b for b in blocks if b[6] == 0 and b[4].strip()]
+    text_blocks.sort(key=lambda b: (b[1], b[0]))
+    paragraphs = [b[4].strip() for b in text_blocks]
     return "\n\n".join(paragraphs)
 
 
