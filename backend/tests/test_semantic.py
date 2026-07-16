@@ -137,11 +137,76 @@ def test_empty_scope_skips_llm_call():
     assert vectorstore.last_where == scope.build_chroma_where()
 
 
+def test_system_prompt_contains_tightened_instructions():
+    """Φάση B1: το system prompt (v2) πρέπει να περιέχει τις νέες οδηγίες
+    σφιξίματος — απάντηση μόνο στο ζητούμενο, ρητή δήλωση όταν λείπει από τα
+    αποσπάσματα, ονόματα/βαθμοί μόνο αυτούσια από αποσπάσματα ή person_name."""
+    documents, metadatas = _make_chunks()
+    vectorstore = FakeVectorStore(documents, metadatas)
+    llm = FakeLLM()
+    scope = IsolationScope(person_id="p1", period="2025")
+    retriever = SemanticRetriever(
+        embedder=FakeEmbedder(), vectorstore=vectorstore, reranker=FakeReranker(), llm=llm
+    )
+
+    retriever.query("Πώς ήταν η στοχοθεσία;", scope)
+
+    assert retriever.prompt_version == "v2"
+    assert "Δεν βρέθηκε στα διαθέσιμα αποσπάσματα." in llm.last_system
+    assert "ΑΠΟΚΛΕΙΣΤΙΚΑ στο ερώτημα" in llm.last_system
+    assert "person_name" in llm.last_system
+
+
+def test_user_prompt_includes_person_name_metadata_when_present():
+    """Φάση B1: όταν το ανακτημένο chunk έχει person_name στα metadata, το
+    όνομα φτάνει αυτούσιο στο user prompt του LLM."""
+    documents = ["Απόσπασμα με στοιχεία αξιολόγησης."]
+    metadatas = [
+        {
+            "doc_id": "doc1",
+            "page": 1,
+            "section": "Στοχοθεσία",
+            "person_id": "p1",
+            "period": "2025",
+            "person_name": "Παπαδόπουλος Γιώργος",
+        }
+    ]
+    vectorstore = FakeVectorStore(documents, metadatas)
+    llm = FakeLLM()
+    scope = IsolationScope(person_id="p1", period="2025")
+    retriever = SemanticRetriever(
+        embedder=FakeEmbedder(), vectorstore=vectorstore, reranker=FakeReranker(), llm=llm
+    )
+
+    retriever.query("Πώς πήγε ο Παπαδόπουλος;", scope)
+
+    assert "Παπαδόπουλος Γιώργος" in llm.last_user
+
+
+def test_user_prompt_omits_person_name_when_absent_from_metadata():
+    """Χωρίς person_name στα metadata (π.χ. παλαιότερα ingested chunks), η
+    κατασκευή του prompt δεν πρέπει να σκάει (KeyError) ούτε να επινοεί όνομα."""
+    documents, metadatas = _make_chunks()  # καμία έχει "person_name" key
+    vectorstore = FakeVectorStore(documents, metadatas)
+    llm = FakeLLM()
+    scope = IsolationScope(person_id="p1", period="2025")
+    retriever = SemanticRetriever(
+        embedder=FakeEmbedder(), vectorstore=vectorstore, reranker=FakeReranker(), llm=llm
+    )
+
+    retriever.query("Πώς ήταν η στοχοθεσία;", scope)
+
+    assert "person_name" not in llm.last_user
+
+
 def run_all():
     tests = [
         test_isolation_where_filter_matches_scope,
         test_citations_match_reranked_top_k,
         test_empty_scope_skips_llm_call,
+        test_system_prompt_contains_tightened_instructions,
+        test_user_prompt_includes_person_name_metadata_when_present,
+        test_user_prompt_omits_person_name_when_absent_from_metadata,
     ]
     for test in tests:
         test()

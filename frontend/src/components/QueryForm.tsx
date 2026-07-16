@@ -145,7 +145,7 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange }: QueryFo
           <option value="">Επιλέξτε άτομο</option>
           {persons.map((p) => (
             <option key={p.person_id} value={p.person_id}>
-              {p.name} ({p.person_id})
+              {p.name ? `${p.name} (${p.person_id})` : `(${p.person_id})`}
             </option>
           ))}
         </select>

@@ -93,7 +93,12 @@ export function ResultsPanel({ result, auditId }: ResultsPanelProps) {
   return (
     <div className="rounded border p-4" style={{ borderColor: '#26262d', backgroundColor: '#0e0e11' }}>
       {result.mode === 'semantic' ? (
-        <SemanticAnswer answer={result.answer} citations={result.citations} auditId={auditId} />
+        <SemanticAnswer
+          answer={result.answer}
+          citations={result.citations}
+          auditId={auditId}
+          routingHint={result.routing_hint}
+        />
       ) : (
         <StructuredView result={result} auditId={auditId} />
       )}

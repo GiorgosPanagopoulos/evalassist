@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import type { Citation } from '../api/types'
 import { CitationBadge } from './CitationBadge'
 import { EmptyState } from './EmptyState'
 import { ReviewBanner } from './ReviewBanner'
+import { RoutingHintBanner } from './RoutingHintBanner'
 
 interface SemanticAnswerProps {
   answer: string
@@ -9,13 +11,18 @@ interface SemanticAnswerProps {
   // cannot be rendered by the type system.
   citations: Citation[]
   auditId: number
+  routingHint?: string | null
 }
 
-export function SemanticAnswer({ answer, citations, auditId }: SemanticAnswerProps) {
+export function SemanticAnswer({ answer, citations, auditId, routingHint }: SemanticAnswerProps) {
   const isEmptyScope = citations.length === 0
+  const [hintDismissed, setHintDismissed] = useState(false)
 
   return (
     <div className="flex flex-col gap-3">
+      {routingHint === 'structured' && !hintDismissed && (
+        <RoutingHintBanner onDismiss={() => setHintDismissed(true)} />
+      )}
       <ReviewBanner />
 
       {isEmptyScope ? (

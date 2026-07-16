@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { ResultsPanel } from './ResultsPanel'
 import type { SemanticResult, StructuredResult } from '../api/types'
 
@@ -14,6 +15,7 @@ describe('ResultsPanel', () => {
       ],
       retrieved_doc_ids: ['doc-1', 'doc-2'],
       model: 'qwen2.5:14b',
+      routing_hint: null,
     }
 
     render(<ResultsPanel result={result} auditId={42} />)
@@ -35,6 +37,7 @@ describe('ResultsPanel', () => {
       citations: [{ doc_id: 'doc-1', page: 1, section: 'A', score: 0.5 }],
       retrieved_doc_ids: ['doc-1'],
       model: 'qwen2.5:14b',
+      routing_hint: null,
     }
 
     render(<ResultsPanel result={result} auditId={1} />)
@@ -51,6 +54,7 @@ describe('ResultsPanel', () => {
       citations: [],
       retrieved_doc_ids: [],
       model: 'qwen2.5:14b',
+      routing_hint: null,
     }
 
     render(<ResultsPanel result={result} auditId={5} />)
@@ -86,6 +90,46 @@ describe('ResultsPanel', () => {
     expect(screen.getByText('Άριστη')).toBeInTheDocument()
     expect(screen.getByText('Ομαδικότητα')).toBeInTheDocument()
     expect(screen.getByText('Καταχώρηση ελέγχου: #10')).toBeInTheDocument()
+  })
+
+  it('shows a dismissible routing hint banner when routing_hint is "structured"', async () => {
+    const user = userEvent.setup()
+    const result: SemanticResult = {
+      mode: 'semantic',
+      answer: 'ok',
+      citations: [{ doc_id: 'doc-1', page: 1, section: 'A', score: 0.5 }],
+      retrieved_doc_ids: ['doc-1'],
+      model: 'qwen2.5:14b',
+      routing_hint: 'structured',
+    }
+
+    render(<ResultsPanel result={result} auditId={1} />)
+
+    const banner = screen.getByText('Το ερώτημα αφορά βαθμολογία — δοκιμάστε Δομημένη αναζήτηση')
+    expect(banner).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Απόρριψη πρότασης' }))
+
+    expect(
+      screen.queryByText('Το ερώτημα αφορά βαθμολογία — δοκιμάστε Δομημένη αναζήτηση'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('does not show the routing hint banner when routing_hint is null', () => {
+    const result: SemanticResult = {
+      mode: 'semantic',
+      answer: 'ok',
+      citations: [{ doc_id: 'doc-1', page: 1, section: 'A', score: 0.5 }],
+      retrieved_doc_ids: ['doc-1'],
+      model: 'qwen2.5:14b',
+      routing_hint: null,
+    }
+
+    render(<ResultsPanel result={result} auditId={1} />)
+
+    expect(
+      screen.queryByText('Το ερώτημα αφορά βαθμολογία — δοκιμάστε Δομημένη αναζήτηση'),
+    ).not.toBeInTheDocument()
   })
 
   it('shows a placeholder when there is no result yet', () => {

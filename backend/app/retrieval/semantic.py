@@ -76,9 +76,12 @@ class SemanticRetriever:
                     score=score,
                 )
             )
-            excerpts.append(
-                f"[{meta['doc_id']} σελ.{meta['page']} - {meta['section']}]\n{documents[idx]}"
-            )
+            person_name = meta.get("person_name")
+            label = f"[{meta['doc_id']} σελ.{meta['page']} - {meta['section']}"
+            if person_name:
+                label += f" - person_name: {person_name}"
+            label += "]"
+            excerpts.append(f"{label}\n{documents[idx]}")
 
         retrieved_doc_ids = sorted({c.doc_id for c in citations})
         user_prompt = f"Ερώτημα: {query_text}\n\nΑποσπάσματα:\n\n" + "\n\n---\n\n".join(excerpts)

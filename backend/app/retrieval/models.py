@@ -35,3 +35,6 @@ class SemanticResult(BaseModel):
     citations: list[Citation]
     retrieved_doc_ids: list[str]
     model: str
+    # Query-routing suggestion (π.χ. "structured") — μόνο hint, το API/frontend
+    # δεν παρακάμπτει ποτέ την επιλογή mode του χρήστη· βλ. app.retrieval.routing.
+    routing_hint: str | None = None

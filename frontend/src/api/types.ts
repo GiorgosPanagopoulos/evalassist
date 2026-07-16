@@ -44,6 +44,7 @@ export interface SemanticResult {
   citations: Citation[]
   retrieved_doc_ids: string[]
   model: string
+  routing_hint: string | null
 }
 
 export interface StructuredQueryResponse {

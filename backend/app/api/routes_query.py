@@ -17,6 +17,7 @@ from app.api.schemas import (
 )
 from app.core.audit import AuditEntry, write_audit
 from app.retrieval.isolation import IsolationScope
+from app.retrieval.routing import route_query
 from app.retrieval.semantic import SemanticRetriever
 from app.retrieval.structured import compare_periods, get_scores, top_bottom_sections
 
@@ -73,6 +74,9 @@ def query_semantic(
         # με retrieved_doc_ids=[] (όχι exception) — audit + 200 φυσικά, χωρίς
         # ειδική περίπτωση εδώ.
         result = retriever.query(request.question, scope)
+        # Advisory routing hint (human-in-the-loop): δεν αλλάζει mode μόνο του,
+        # μόνο ενημερώνει το frontend ώστε να προτείνει "Δομημένη αναζήτηση".
+        result.routing_hint = route_query(request.question)
         doc_ids = result.retrieved_doc_ids
     except Exception as exc:
         if not doc_ids:

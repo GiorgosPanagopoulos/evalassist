@@ -217,6 +217,50 @@ def test_pre_retrieval_failure_audits_empty_doc_ids():
         os.remove(db_path)
 
 
+def test_routing_hint_present_when_question_matches_heuristic():
+    """Φάση B2: το endpoint υπολογίζει το routing_hint από το ερώτημα ανεξάρτητα
+    από τον retriever — human-in-the-loop, δεν αλλάζει mode μόνο του."""
+    db_path = _make_temp_db()
+    try:
+        _override_settings(db_path)
+        app.dependency_overrides[get_semantic_retriever] = lambda: FakeSemanticRetriever()
+        client = TestClient(app)
+
+        response = client.post(
+            "/query/semantic",
+            json={
+                "person_id": "p1",
+                "period": "2025",
+                "question": "Ποιος ήταν ο βαθμός στις Τοποθετήσεις;",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["result"]["routing_hint"] == "structured"
+    finally:
+        _clear_overrides()
+        os.remove(db_path)
+
+
+def test_routing_hint_absent_when_question_does_not_match_heuristic():
+    db_path = _make_temp_db()
+    try:
+        _override_settings(db_path)
+        app.dependency_overrides[get_semantic_retriever] = lambda: FakeSemanticRetriever()
+        client = TestClient(app)
+
+        response = client.post(
+            "/query/semantic",
+            json={"person_id": "p1", "period": "2025", "question": "Πώς ήταν η στοχοθεσία;"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["result"]["routing_hint"] is None
+    finally:
+        _clear_overrides()
+        os.remove(db_path)
+
+
 def run_all():
     tests = [
         test_response_embeds_result_and_audit_id,
@@ -224,6 +268,8 @@ def run_all():
         test_empty_scope_returns_200_with_empty_audit_doc_ids,
         test_llm_failure_after_retrieval_audits_retrieved_doc_ids,
         test_pre_retrieval_failure_audits_empty_doc_ids,
+        test_routing_hint_present_when_question_matches_heuristic,
+        test_routing_hint_absent_when_question_does_not_match_heuristic,
     ]
     for test in tests:
         test()

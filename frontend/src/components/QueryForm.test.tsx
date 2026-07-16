@@ -27,6 +27,7 @@ const semanticResult: SemanticResult = {
   citations: [],
   retrieved_doc_ids: [],
   model: 'qwen2.5:14b',
+  routing_hint: null,
 }
 
 function makeFakeApi(overrides: Partial<QueryFormApi> = {}): QueryFormApi {
@@ -46,6 +47,15 @@ describe('QueryForm', () => {
 
     expect(await screen.findByRole('option', { name: 'Άννα (p1)' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Γιώργος (p2)' })).toBeInTheDocument()
+  })
+
+  it('shows bare (ΑΓΜ) for a person without a name', async () => {
+    const api = makeFakeApi({
+      getPersons: vi.fn(async () => [...PERSONS, { person_id: 'p3', name: '' }]),
+    })
+    render(<QueryForm api={api} onResult={vi.fn()} />)
+
+    expect(await screen.findByRole('option', { name: '(p3)' })).toBeInTheDocument()
   })
 
   it('fetches and shows periods when a person is chosen', async () => {
