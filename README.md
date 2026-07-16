@@ -199,6 +199,15 @@ python evals/run_evals.py
 cd frontend && npm test
 ```
 
+## Windows Setup Notes
+
+The project targets Python 3.11+ and is developed primarily on macOS and Linux. A few dependencies need platform-specific handling on Windows.
+
+- Platform-conditional dependencies: `backend/requirements.txt` pins `numpy` and `scipy` to lower versions on Windows (`numpy==2.4.6`, `scipy==1.17.1`), since the versions used on macOS and Linux require Python 3.12+ and the Windows setup runs Python 3.11.9. `uvloop` is marked `sys_platform != "win32"` and is absent on Windows, since it has no Windows support; uvicorn detects this automatically and runs with its default asyncio event loop instead.
+- DejaVu Sans font for PDF tests: `backend/tests/test_ingestion_pipeline.py` builds dummy PDFs containing Greek text via PyMuPDF's `insert_textbox`. Install DejaVu Sans at the user level, then set the `EVALASSIST_TEST_FONT` environment variable (User scope) to the full path of `DejaVuSans.ttf`. Windows default fonts produce an incorrect ToUnicode CMap in PyMuPDF's `insert_textbox`, which garbles the Greek text on extraction.
+- Tesseract OCR: install Tesseract with the Greek language pack, same as the Quick Start step above.
+- Synthetic e2e tests: running `scripts/e2e_synthetic_test.py` (via `scripts/generate_synthetic_pdfs.py`) requires WeasyPrint with the GTK3 runtime installed on Windows. This is only needed to generate the synthetic fixtures for that test script, not for running the application itself.
+
 ## API Reference
 
 Every endpoint is scoped through `IsolationScope` before it touches SQLite or ChromaDB, and every call, successful or not, is written to the append-only audit log. Pass the caller identity via the `X-User` header (default `anonymous`); it is recorded on the audit entry, it does not gate authorization.
