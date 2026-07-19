@@ -25,6 +25,7 @@ def test_defaults_match_previous_hardcoded_values():
     assert settings.RERANKER_MODEL == "BAAI/bge-reranker-v2-m3"
     assert settings.OLLAMA_URL == "http://localhost:11434"
     assert settings.OLLAMA_MODEL == "qwen2.5:14b"
+    assert settings.OLLAMA_TIMEOUT_S == 120
     assert settings.TOP_K_RETRIEVE == 20
     assert settings.TOP_K_RERANK == 5
     assert settings.ALLOWED_ORIGINS == ["http://localhost:5173"]

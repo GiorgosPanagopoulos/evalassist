@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
     OLLAMA_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen2.5:14b"
+    OLLAMA_TIMEOUT_S: int = 120
     TOP_K_RETRIEVE: int = 20
     TOP_K_RERANK: int = 5
     ALLOWED_ORIGINS: list[str] = ["http://localhost:5173"]

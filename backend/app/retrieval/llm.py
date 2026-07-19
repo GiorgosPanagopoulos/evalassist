@@ -10,7 +10,7 @@ from app.core.config import get_settings
 
 MODEL_NAME = get_settings().OLLAMA_MODEL
 DEFAULT_BASE_URL = get_settings().OLLAMA_URL
-DEFAULT_TIMEOUT_S = 120
+DEFAULT_TIMEOUT_S = get_settings().OLLAMA_TIMEOUT_S
 
 
 class OllamaClient:
