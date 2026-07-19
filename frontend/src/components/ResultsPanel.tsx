@@ -209,7 +209,7 @@ function StructuredView({ result, auditId }: { result: StructuredResult; auditId
         <SectionsTable sections={data.sections} />
       )}
 
-      {data.entry_a && data.entry_b && (
+      {!!data.entry_a && !!data.entry_b && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <EntryDetails
             entry={data.entry_a as EvaluationEntry}
