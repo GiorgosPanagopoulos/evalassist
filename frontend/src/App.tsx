@@ -64,32 +64,13 @@ function App() {
         className="relative flex flex-col overflow-hidden"
         style={{ background: 'radial-gradient(ellipse at 50% 40%, #131316 0%, #0a0a0c 70%)' }}
       >
-        <svg
-          aria-hidden
-          viewBox="0 0 200 200"
-          className="pointer-events-none absolute top-1/2 left-1/2 z-0 h-[360px] w-[360px] -translate-x-1/2 -translate-y-1/2"
-          style={{ opacity: 0.14 }}
-        >
-          <defs>
-            <path id="emblem-ring" d="M 100,100 m -80,0 a 80,80 0 1,1 160,0 a 80,80 0 1,1 -160,0" />
-          </defs>
-          <circle cx="100" cy="100" r="92" fill="none" stroke="#f2f2f4" strokeWidth="1" />
-          <circle cx="100" cy="100" r="80" fill="none" stroke="#f2f2f4" strokeWidth="1" />
-          <circle cx="100" cy="100" r="46" fill="none" stroke="#f2f2f4" strokeWidth="1" />
-          <text fill="#f2f2f4" fontSize="10" letterSpacing="4">
-            <textPath href="#emblem-ring" startOffset="0%">
-              EVALASSIST · EVALASSIST ·
-            </textPath>
-          </text>
-          <g stroke="#f2f2f4" strokeWidth="2.2" fill="none" strokeLinecap="round">
-            <line x1="100" y1="60" x2="100" y2="145" />
-            <path d="M 82,60 C 82,78 118,78 118,60" />
-            <line x1="82" y1="60" x2="82" y2="48" />
-            <line x1="118" y1="60" x2="118" y2="48" />
-            <line x1="100" y1="48" x2="100" y2="42" />
-            <line x1="80" y1="145" x2="120" y2="145" />
-          </g>
-        </svg>
+        <img
+          src="/logo-watermark.png"
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none select-none absolute top-1/2 left-1/2 z-0 -translate-x-1/2 -translate-y-1/2"
+          style={{ width: 360, opacity: 0.18, filter: 'grayscale(0.4)' }}
+        />
 
         <header
           className="relative z-10 flex items-center justify-between"

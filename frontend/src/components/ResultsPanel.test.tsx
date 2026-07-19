@@ -43,7 +43,7 @@ describe('ResultsPanel', () => {
     render(<ResultsPanel result={result} auditId={1} />)
 
     expect(
-      screen.getByText('Συμβουλευτικό περιεχόμενο — απαιτείται ανθρώπινη αξιολόγηση'),
+      screen.getByText('Συμβουλευτικό περιεχόμενο - απαιτείται ανθρώπινη αξιολόγηση'),
     ).toBeInTheDocument()
   })
 
@@ -62,7 +62,7 @@ describe('ResultsPanel', () => {
     expect(screen.getByText('Δεν βρέθηκαν δεδομένα στο εύρος')).toBeInTheDocument()
     // ReviewBanner must still be present even for the empty-scope case.
     expect(
-      screen.getByText('Συμβουλευτικό περιεχόμενο — απαιτείται ανθρώπινη αξιολόγηση'),
+      screen.getByText('Συμβουλευτικό περιεχόμενο - απαιτείται ανθρώπινη αξιολόγηση'),
     ).toBeInTheDocument()
   })
 
@@ -105,13 +105,13 @@ describe('ResultsPanel', () => {
 
     render(<ResultsPanel result={result} auditId={1} />)
 
-    const banner = screen.getByText('Το ερώτημα αφορά βαθμολογία — δοκιμάστε Δομημένη αναζήτηση')
+    const banner = screen.getByText('Το ερώτημα αφορά βαθμολογία - δοκιμάστε Δομημένη αναζήτηση')
     expect(banner).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Απόρριψη πρότασης' }))
 
     expect(
-      screen.queryByText('Το ερώτημα αφορά βαθμολογία — δοκιμάστε Δομημένη αναζήτηση'),
+      screen.queryByText('Το ερώτημα αφορά βαθμολογία - δοκιμάστε Δομημένη αναζήτηση'),
     ).not.toBeInTheDocument()
   })
 
@@ -128,7 +128,7 @@ describe('ResultsPanel', () => {
     render(<ResultsPanel result={result} auditId={1} />)
 
     expect(
-      screen.queryByText('Το ερώτημα αφορά βαθμολογία — δοκιμάστε Δομημένη αναζήτηση'),
+      screen.queryByText('Το ερώτημα αφορά βαθμολογία - δοκιμάστε Δομημένη αναζήτηση'),
     ).not.toBeInTheDocument()
   })
 
