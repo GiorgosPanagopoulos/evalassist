@@ -9,24 +9,9 @@ const api = new ApiClient()
 
 function MainEmptyState() {
   return (
-    <div
-      className="flex h-full flex-col items-center justify-center gap-3.5 text-center"
-      style={{ background: 'radial-gradient(ellipse at 50% 40%, #131316 0%, #0a0a0c 70%)' }}
-    >
-      <div
-        className="flex h-11 w-11 items-center justify-center rounded-xl border"
-        style={{ borderColor: '#26262d' }}
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4a4a55" strokeWidth="2" aria-hidden>
-          <circle cx="11" cy="11" r="7" />
-          <line x1="21" y1="21" x2="16.65" y2="16.65" />
-        </svg>
-      </div>
+    <div className="flex h-full flex-col items-center justify-center gap-3.5 text-center">
       <p className="text-[13px]" style={{ color: '#6d6d78' }}>
         Υποβάλετε ένα ερώτημα για να δείτε αποτελέσματα
-      </p>
-      <p className="font-mono text-[11px]" style={{ color: '#4a4a55' }}>
-        ⌘K για γρήγορη αναζήτηση
       </p>
     </div>
   )
@@ -49,29 +34,45 @@ function App() {
   }
 
   return (
-    <div className="grid min-h-screen" style={{ gridTemplateColumns: '300px 1fr', backgroundColor: '#0a0a0c' }}>
+    <div className="grid min-h-screen" style={{ gridTemplateColumns: 'minmax(220px, 300px) 1fr', backgroundColor: '#0a0a0c' }}>
       <aside
         className="flex h-full flex-col"
         style={{ backgroundColor: '#0e0e11', borderRight: '1px solid #1d1d22', padding: '22px 20px' }}
       >
         <div className="mb-5 flex items-center gap-2.5">
-          <div
-            className="flex h-6.5 w-6.5 items-center justify-center rounded-[7px] font-mono font-bold"
-            style={{ background: 'linear-gradient(135deg, #7c5cff, #4de3ff)', color: '#0a0a0c' }}
-          >
-            E
-          </div>
+          <img
+            src="/logo.png"
+            alt="EvalAssist"
+            className="h-7 w-7 rounded-full object-cover"
+            style={{ backgroundColor: '#f7f4ec', boxShadow: '0 0 0 1px #26262d' }}
+          />
           <span className="text-[15px] font-bold" style={{ color: '#f2f2f4' }}>
             EvalAssist
+          </span>
+          <span
+            className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[.5px]"
+            style={{ backgroundColor: '#facc15', color: '#0a0a0c' }}
+          >
+            Beta
           </span>
         </div>
 
         <QueryForm api={api} onResult={handleResult} onError={handleError} onModeLabelChange={setModeLabel} />
       </aside>
 
-      <div className="flex flex-col">
+      <div
+        className="relative flex flex-col overflow-hidden"
+        style={{ background: 'radial-gradient(ellipse at 50% 40%, #131316 0%, #0a0a0c 70%)' }}
+      >
+        <img
+          src="/logo-watermark.png"
+          alt=""
+          aria-hidden
+          className="pointer-events-none absolute top-1/2 left-1/2 z-0 h-[340px] w-[340px] -translate-x-1/2 -translate-y-1/2 rounded-full object-cover opacity-[0.06] grayscale brightness-200"
+        />
+
         <header
-          className="flex items-center justify-between"
+          className="relative z-10 flex items-center justify-between"
           style={{ padding: '16px 24px', borderBottom: '1px solid #1d1d22' }}
         >
           <div className="font-mono text-[12px]">
@@ -81,13 +82,20 @@ function App() {
           <HealthIndicator api={api} />
         </header>
 
-        <div className="flex-1">
+        <div className="relative z-10 flex-1">
           {result === null ? <MainEmptyState /> : (
-            <div style={{ padding: '24px' }}>
+            <div className="mx-auto w-full max-w-[1100px]" style={{ padding: '24px' }}>
               <ResultsPanel result={result} auditId={auditId} />
             </div>
           )}
         </div>
+
+        <footer
+          className="relative z-10 font-mono text-[10px]"
+          style={{ padding: '10px 24px', color: '#4a4a55' }}
+        >
+          v1.0 · 2026
+        </footer>
       </div>
     </div>
   )

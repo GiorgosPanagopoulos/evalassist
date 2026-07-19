@@ -24,7 +24,11 @@ fixtures/synthetic_pdfs/
 .env
 .env.local
 
+# Logs
+*.log
+
 # Node / frontend
+node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
@@ -33,4 +37,6 @@ frontend/.vite/
 .DS_Store
 .vscode/
 .idea/
+
+# Private / not for the repository (e.g. real personnel documents)
 private/

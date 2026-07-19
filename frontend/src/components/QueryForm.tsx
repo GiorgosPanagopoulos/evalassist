@@ -38,7 +38,17 @@ const MODE_LABELS: Record<StructuredOperation, string> = {
 const LABEL_CLASS = 'text-[11px] font-semibold uppercase tracking-[.6px] text-[#8b8b95]'
 
 const SELECT_CLASS =
-  'rounded-lg border py-2.5 pl-3 pr-8 text-[13px] appearance-none bg-no-repeat bg-[right_12px_center]'
+  'rounded-lg border border-[#26262d] py-2.5 pl-3 pr-8 text-[13px] appearance-none bg-no-repeat bg-[right_12px_center] transition-colors duration-[120ms]'
+
+const FIELD_CLASS = 'rounded-lg border border-[#26262d] px-3 py-2.5 text-[13px] transition-colors duration-[120ms]'
+
+const ACTIVE_SEGMENT_STYLE = {
+  backgroundColor: '#26262d',
+  color: '#f2f2f4',
+  boxShadow: '0 1px 3px rgba(0,0,0,.4), 0 0 0 1px #4de3ff, 0 0 8px rgba(77,227,255,.35)',
+}
+
+const INACTIVE_SEGMENT_STYLE = { backgroundColor: 'transparent', color: '#8b8b95' }
 
 const CHEVRON_BG = {
   backgroundImage:
@@ -124,12 +134,11 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange }: QueryFo
 
   const selectStyle = (value: string) => ({
     backgroundColor: '#131318',
-    borderColor: '#26262d',
     color: value ? '#f2f2f4' : '#6d6d78',
     ...CHEVRON_BG,
   })
 
-  const fieldStyle = { backgroundColor: '#131318', borderColor: '#26262d', color: '#f2f2f4' }
+  const fieldStyle = { backgroundColor: '#131318', color: '#f2f2f4' }
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-1 flex-col gap-3.5">
@@ -151,52 +160,95 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange }: QueryFo
         </select>
       </label>
 
-      <label className="flex flex-col gap-1.5">
-        <span className={LABEL_CLASS}>Περίοδος</span>
-        <select
-          aria-label="Περίοδος"
-          value={period}
-          onChange={(e) => setPeriod(e.target.value)}
-          disabled={!personId}
-          className={SELECT_CLASS}
-          style={selectStyle(period)}
-        >
-          <option value="">Επιλέξτε περίοδο</option>
-          {periods.map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-        </select>
-      </label>
+      {mode === 'structured' && operation === 'compare_periods' ? (
+        <div className="flex flex-col gap-2">
+          <label className="flex flex-col gap-1.5">
+            <span className={LABEL_CLASS}>Από</span>
+            <select
+              aria-label="Από"
+              value={period}
+              onChange={(e) => setPeriod(e.target.value)}
+              disabled={!personId}
+              className={SELECT_CLASS}
+              style={selectStyle(period)}
+            >
+              <option value="">Επιλέξτε περίοδο</option>
+              {periods.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={LABEL_CLASS}>Έως</span>
+            <select
+              aria-label="Έως"
+              value={otherPeriod}
+              onChange={(e) => setOtherPeriod(e.target.value)}
+              disabled={!personId}
+              className={SELECT_CLASS}
+              style={selectStyle(otherPeriod)}
+            >
+              <option value="">Επιλέξτε περίοδο</option>
+              {periods
+                .filter((p) => p !== period)
+                .map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+            </select>
+          </label>
+        </div>
+      ) : (
+        <label className="flex flex-col gap-1.5">
+          <span className={LABEL_CLASS}>Περίοδος</span>
+          <select
+            aria-label="Περίοδος"
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
+            disabled={!personId}
+            className={SELECT_CLASS}
+            style={selectStyle(period)}
+          >
+            <option value="">Επιλέξτε περίοδο</option>
+            {periods.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
-      <div className="flex rounded-lg border p-[3px]" style={{ backgroundColor: '#131318', borderColor: '#26262d' }} role="group" aria-label="Λειτουργία ερωτήματος">
-        <button
-          type="button"
-          onClick={() => setMode('structured')}
-          aria-pressed={mode === 'structured'}
-          className="flex-1 rounded-md px-3 py-1.5 text-[12px] font-semibold"
-          style={
-            mode === 'structured'
-              ? { backgroundColor: '#26262d', color: '#f2f2f4', boxShadow: '0 1px 3px rgba(0,0,0,.4)' }
-              : { backgroundColor: 'transparent', color: '#8b8b95' }
-          }
+      <div className="flex flex-col gap-1.5">
+        <span className={LABEL_CLASS}>Τύπος</span>
+        <div
+          className="flex rounded-lg border p-[3px]"
+          style={{ backgroundColor: '#131318', borderColor: '#26262d' }}
+          role="group"
+          aria-label="Τύπος ερωτήματος"
         >
-          Δομημένη
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode('semantic')}
-          aria-pressed={mode === 'semantic'}
-          className="flex-1 rounded-md px-3 py-1.5 text-[12px] font-semibold"
-          style={
-            mode === 'semantic'
-              ? { backgroundColor: '#26262d', color: '#f2f2f4', boxShadow: '0 1px 3px rgba(0,0,0,.4)' }
-              : { backgroundColor: 'transparent', color: '#8b8b95' }
-          }
-        >
-          Σημασιολογική
-        </button>
+          <button
+            type="button"
+            onClick={() => setMode('structured')}
+            aria-pressed={mode === 'structured'}
+            className="flex-1 rounded-md px-3 py-1.5 text-[12px] font-semibold"
+            style={mode === 'structured' ? ACTIVE_SEGMENT_STYLE : INACTIVE_SEGMENT_STYLE}
+          >
+            Δομημένη
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('semantic')}
+            aria-pressed={mode === 'semantic'}
+            className="flex-1 rounded-md px-3 py-1.5 text-[12px] font-semibold"
+            style={mode === 'semantic' ? ACTIVE_SEGMENT_STYLE : INACTIVE_SEGMENT_STYLE}
+          >
+            Σημασιολογική
+          </button>
+        </div>
       </div>
 
       {mode === 'structured' ? (
@@ -218,28 +270,6 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange }: QueryFo
             </select>
           </label>
 
-          {operation === 'compare_periods' && (
-            <label className="flex flex-col gap-1.5">
-              <span className={LABEL_CLASS}>Περίοδος σύγκρισης</span>
-              <select
-                aria-label="Περίοδος σύγκρισης"
-                value={otherPeriod}
-                onChange={(e) => setOtherPeriod(e.target.value)}
-                className={SELECT_CLASS}
-                style={selectStyle(otherPeriod)}
-              >
-                <option value="">Επιλέξτε περίοδο</option>
-                {periods
-                  .filter((p) => p !== period)
-                  .map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-              </select>
-            </label>
-          )}
-
           {operation === 'top_bottom_sections' && (
             <label className="flex flex-col gap-1.5">
               <span className={LABEL_CLASS}>Αριθμός ενοτήτων (n)</span>
@@ -249,7 +279,7 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange }: QueryFo
                 min={1}
                 value={n}
                 onChange={(e) => setN(e.target.value)}
-                className="rounded-lg border px-3 py-2.5 text-[13px]"
+                className={FIELD_CLASS}
                 style={fieldStyle}
               />
             </label>
@@ -263,7 +293,7 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange }: QueryFo
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             rows={3}
-            className="rounded-lg border px-3 py-2.5 text-[13px]"
+            className={FIELD_CLASS}
             style={fieldStyle}
           />
           {questionTooShort && question.length > 0 && (
@@ -280,14 +310,37 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange }: QueryFo
         </p>
       )}
 
+      {loading && mode === 'semantic' && (
+        <p className="text-[11px]" style={{ color: '#8b8b95' }}>
+          Το τοπικό μοντέλο επεξεργάζεται το ερώτημα — μπορεί να πάρει έως 3-4 λεπτά.
+        </p>
+      )}
+
       <button
         type="submit"
         disabled={!canSubmit || loading}
-        className="mt-auto w-full rounded-lg py-3 text-[13px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+        className="mt-auto flex w-full items-center justify-center gap-2 rounded-lg py-3 text-[13px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
         style={{ backgroundColor: '#f2f2f4', color: '#0a0a0c' }}
       >
+        {loading && (
+          <svg
+            className="animate-spin"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden
+          >
+            <circle cx="12" cy="12" r="10" stroke="#0a0a0c" strokeWidth="3" opacity="0.25" />
+            <path d="M22 12a10 10 0 0 0-10-10" stroke="#0a0a0c" strokeWidth="3" strokeLinecap="round" />
+          </svg>
+        )}
         {loading ? 'Αποστολή...' : 'Υποβολή ερωτήματος ⏎'}
       </button>
+
+      <p className="font-mono text-[10px]" style={{ color: '#4a4a55' }}>
+        ΔΙΠΛΗΚΥΒ/Τμήμα Τεχνητής Νοημοσύνης & Αναλυτικής Δεδομένων
+      </p>
     </form>
   )
 }

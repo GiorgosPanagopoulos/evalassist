@@ -88,16 +88,45 @@ describe('QueryForm', () => {
     expect(screen.getByLabelText('Λειτουργία')).toBeInTheDocument()
   })
 
-  it('shows the other_period field for compare_periods', async () => {
+  it('replaces the single period field with an Από/Έως pair for compare_periods', async () => {
     const api = makeFakeApi()
     const user = userEvent.setup()
     render(<QueryForm api={api} onResult={vi.fn()} />)
 
-    expect(screen.queryByLabelText('Περίοδος σύγκρισης')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Περίοδος')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Έως')).not.toBeInTheDocument()
 
     await user.selectOptions(screen.getByLabelText('Λειτουργία'), 'compare_periods')
 
-    expect(screen.getByLabelText('Περίοδος σύγκρισης')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Περίοδος')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Από')).toBeInTheDocument()
+    expect(screen.getByLabelText('Έως')).toBeInTheDocument()
+  })
+
+  it('submits the compare_periods payload using the Από/Έως fields', async () => {
+    const api = makeFakeApi()
+    const onResult = vi.fn()
+    const user = userEvent.setup()
+    render(<QueryForm api={api} onResult={onResult} />)
+
+    await screen.findByRole('option', { name: 'Άννα (p1)' })
+    await user.selectOptions(screen.getByLabelText('Άτομο'), 'p1')
+    await screen.findByRole('option', { name: '2024-Q1' })
+    await user.selectOptions(screen.getByLabelText('Λειτουργία'), 'compare_periods')
+    await user.selectOptions(screen.getByLabelText('Από'), '2024-Q1')
+    await user.selectOptions(screen.getByLabelText('Έως'), '2024-Q2')
+
+    await user.click(screen.getByRole('button', { name: /Υποβολή ερωτήματος/ }))
+
+    await waitFor(() =>
+      expect(api.queryStructured).toHaveBeenCalledWith({
+        person_id: 'p1',
+        period: '2024-Q1',
+        operation: 'compare_periods',
+        other_period: '2024-Q2',
+      }),
+    )
+    expect(onResult).toHaveBeenCalledWith(structuredResult, 1)
   })
 
   it('blocks submit when the semantic question is under 3 characters', async () => {
