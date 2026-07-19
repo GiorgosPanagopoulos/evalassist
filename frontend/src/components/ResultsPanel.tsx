@@ -170,7 +170,7 @@ function EntryDetails({ entry, title }: { entry: EvaluationEntry; title?: string
           <>
             <span style={{ color: '#8b8b95' }}>Αξιολογητής</span>
             <span>
-              {[evaluator.rank, evaluator.name, evaluator.role].filter(Boolean).join(' — ')}
+              {[evaluator.rank, evaluator.name, evaluator.role].filter(Boolean).join(' - ')}
             </span>
           </>
         )}

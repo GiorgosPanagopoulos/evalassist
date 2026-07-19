@@ -326,7 +326,7 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange }: QueryFo
 
       {loading && mode === 'semantic' && (
         <p className="text-[11px]" style={{ color: '#8b8b95' }}>
-          Το τοπικό μοντέλο επεξεργάζεται το ερώτημα — μπορεί να πάρει έως 3-4 λεπτά.
+          Το τοπικό μοντέλο επεξεργάζεται το ερώτημα - μπορεί να πάρει έως 3-4 λεπτά.
         </p>
       )}
 

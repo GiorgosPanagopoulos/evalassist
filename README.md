@@ -1,6 +1,6 @@
 <div align="center">
 
-<!-- docs/logo.svg placeholder: add a logo asset at this path to have it appear here -->
+<img src="docs/logo.png" alt="EvalAssist" width="160" />
 
 # EvalAssist
 
@@ -169,9 +169,20 @@ python -c "
 from pathlib import Path
 from app.ingestion.pipeline import run_ingestion
 result = run_ingestion(Path('path/to/report.pdf'))
-print(result.doc_id, result.person_id, result.period)
+print(result.doc_id, result.person_id, result.chunk_count, len(result.periods))
 "
 ```
+
+## Running the App
+
+The simplest way to run EvalAssist is from the repo root, which starts the backend and frontend together via `concurrently`:
+
+```bash
+npm install
+npm run dev
+```
+
+Alternatively, run the backend and frontend separately:
 
 ### Backend
 
@@ -199,7 +210,15 @@ python evals/run_evals.py
 cd frontend && npm test
 ```
 
-## Windows Setup Notes
+## Platform Notes
+
+### Running on macOS
+
+- Tesseract OCR with the Greek language pack: `brew install tesseract tesseract-lang`
+- Metal acceleration is used automatically by Ollama, no extra configuration needed
+- On machines with 8GB RAM, prefer the smaller model: `ollama pull qwen2.5:7b` and set `OLLAMA_MODEL=qwen2.5:7b` in `backend/.env`
+
+### Running on Windows
 
 The project targets Python 3.11+ and is developed primarily on macOS and Linux. A few dependencies need platform-specific handling on Windows.
 
@@ -207,6 +226,9 @@ The project targets Python 3.11+ and is developed primarily on macOS and Linux. 
 - DejaVu Sans font for PDF tests: `backend/tests/test_ingestion_pipeline.py` builds dummy PDFs containing Greek text via PyMuPDF's `insert_textbox`. Install DejaVu Sans at the user level, then set the `EVALASSIST_TEST_FONT` environment variable (User scope) to the full path of `DejaVuSans.ttf`. Windows default fonts produce an incorrect ToUnicode CMap in PyMuPDF's `insert_textbox`, which garbles the Greek text on extraction.
 - Tesseract OCR: install Tesseract with the Greek language pack, same as the Quick Start step above.
 - Synthetic e2e tests: running `scripts/e2e_synthetic_test.py` (via `scripts/generate_synthetic_pdfs.py`) requires WeasyPrint with the GTK3 runtime installed on Windows. This is only needed to generate the synthetic fixtures for that test script, not for running the application itself.
+- `OLLAMA_TIMEOUT_S=600` in `backend/.env` when the model runs CPU-only: generation can exceed the default 120s and the API returns a 503
+- `DB_PATH`/`CHROMA_PATH` overrides in `.env` should be given as absolute paths with forward slashes; relative paths resolve against the process cwd
+- Tesseract via the UB Mannheim installer with the Greek language pack
 
 ## API Reference
 
@@ -238,6 +260,7 @@ All keys below live in `backend/.env.example`. Copy it to `backend/.env` and ove
 | `TOP_K_RETRIEVE` | Chunks retrieved from ChromaDB before reranking | No | `20` |
 | `TOP_K_RERANK` | Chunks kept after reranking, passed to the LLM | No | `5` |
 | `ALLOWED_ORIGINS` | CORS origins allowed by the API | No | `["http://localhost:5173"]` |
+| `OLLAMA_TIMEOUT_S` | Ollama HTTP read timeout in seconds | No | `120` |
 
 ## Project Structure
 
@@ -322,7 +345,7 @@ evalassist/
 | Refactor | Core module (config, audit, prompt versioning, exceptions), README upgrade | Complete (8 tests) |
 | 4 | FastAPI service layer, audit log persistence, HTTP error mapping | Complete |
 | 5 | React frontend, golden set evals, pre-commit, CI | Complete |
-| Future | `document_qa` mode, explicit objectives/duties fields | Planned |
+| Future | `document_qa` mode, explicit objectives/duties fields, ingestion CLI | Planned |
 
 ## License
 
