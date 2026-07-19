@@ -45,7 +45,14 @@ const FIELD_CLASS = 'rounded-lg border border-[#26262d] px-3 py-2.5 text-[13px] 
 const ACTIVE_SEGMENT_STYLE = {
   backgroundColor: '#26262d',
   color: '#f2f2f4',
-  boxShadow: '0 1px 3px rgba(0,0,0,.4), 0 0 0 1px #4de3ff, 0 0 8px rgba(77,227,255,.35)',
+  boxShadow: '0 1px 3px rgba(0,0,0,.4)',
+}
+
+const ACTIVE_SEMANTIC_SEGMENT_STYLE = {
+  backgroundColor: '#26262d',
+  color: '#f2f2f4',
+  boxShadow: '0 1px 3px rgba(0,0,0,.4), 0 0 0 1.5px #4de3ff',
+  borderRadius: '6px',
 }
 
 const INACTIVE_SEGMENT_STYLE = { backgroundColor: 'transparent', color: '#8b8b95' }
@@ -138,6 +145,13 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange }: QueryFo
     ...CHEVRON_BG,
   })
 
+  const personSelectStyle = (value: string) => ({
+    backgroundColor: '#131318',
+    color: value ? '#f2f2f4' : '#e8e8ec',
+    fontFamily: value ? undefined : 'var(--font-mono)',
+    ...CHEVRON_BG,
+  })
+
   const fieldStyle = { backgroundColor: '#131318', color: '#f2f2f4' }
 
   return (
@@ -149,9 +163,9 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange }: QueryFo
           value={personId}
           onChange={(e) => setPersonId(e.target.value)}
           className={SELECT_CLASS}
-          style={selectStyle(personId)}
+          style={personSelectStyle(personId)}
         >
-          <option value="">Επιλέξτε άτομο</option>
+          <option value="">Μ-00000</option>
           {persons.map((p) => (
             <option key={p.person_id} value={p.person_id}>
               {p.name ? `${p.name} (${p.person_id})` : `(${p.person_id})`}
@@ -244,7 +258,7 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange }: QueryFo
             onClick={() => setMode('semantic')}
             aria-pressed={mode === 'semantic'}
             className="flex-1 rounded-md px-3 py-1.5 text-[12px] font-semibold"
-            style={mode === 'semantic' ? ACTIVE_SEGMENT_STYLE : INACTIVE_SEGMENT_STYLE}
+            style={mode === 'semantic' ? ACTIVE_SEMANTIC_SEGMENT_STYLE : INACTIVE_SEGMENT_STYLE}
           >
             Σημασιολογική
           </button>
@@ -294,7 +308,7 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange }: QueryFo
             onChange={(e) => setQuestion(e.target.value)}
             rows={3}
             className={FIELD_CLASS}
-            style={fieldStyle}
+            style={{ ...fieldStyle, minHeight: '80px' }}
           />
           {questionTooShort && question.length > 0 && (
             <span className="font-mono text-[11px]" style={{ color: '#ff6b6b' }}>
@@ -320,7 +334,7 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange }: QueryFo
         type="submit"
         disabled={!canSubmit || loading}
         className="mt-auto flex w-full items-center justify-center gap-2 rounded-lg py-3 text-[13px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-        style={{ backgroundColor: '#f2f2f4', color: '#0a0a0c' }}
+        style={{ backgroundColor: '#f2ede0', color: '#0a0a0c' }}
       >
         {loading && (
           <svg
@@ -338,9 +352,14 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange }: QueryFo
         {loading ? 'Αποστολή...' : 'Υποβολή ερωτήματος ⏎'}
       </button>
 
-      <p className="font-mono text-[10px]" style={{ color: '#4a4a55' }}>
-        ΔΙΠΛΗΚΥΒ/Τμήμα Τεχνητής Νοημοσύνης & Αναλυτικής Δεδομένων
-      </p>
+      <div className="flex flex-col gap-1">
+        <p className="text-left font-mono text-[9px]" style={{ color: '#5a5a63' }}>
+          ΔΙΠΛΗΚΥΒ-Τμήματα Τεχνητής Νοημοσύνης & Αναλυτικής Δεδομένων
+        </p>
+        <p className="text-left font-mono text-[9px]" style={{ color: '#5a5a63' }}>
+          v1.0 · 2026
+        </p>
+      </div>
     </form>
   )
 }
