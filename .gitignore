@@ -40,3 +40,5 @@ frontend/.vite/
 
 # Private / not for the repository (e.g. real personnel documents)
 private/
+
+.venv/
