@@ -25,6 +25,7 @@ def test_defaults_match_previous_hardcoded_values():
     assert settings.RERANKER_MODEL == "BAAI/bge-reranker-v2-m3"
     assert settings.OLLAMA_URL == "http://localhost:11434"
     assert settings.OLLAMA_MODEL == "qwen2.5:14b"
+    assert settings.OLLAMA_GEN_MODEL == ""
     assert settings.OLLAMA_TIMEOUT_S == 120
     assert settings.TOP_K_RETRIEVE == 20
     assert settings.TOP_K_RERANK == 5
@@ -49,11 +50,20 @@ def test_get_settings_is_a_cached_singleton():
     assert get_settings() is get_settings()
 
 
+def test_resolved_gen_model_falls_back_to_ollama_model():
+    settings = Settings(_env_file=None, OLLAMA_GEN_MODEL="")
+    assert settings.resolved_gen_model == settings.OLLAMA_MODEL
+
+    settings = Settings(_env_file=None, OLLAMA_GEN_MODEL="hf.co/ilsp/Llama-Krikri-8B-Instruct-GGUF:Q4_K_M")
+    assert settings.resolved_gen_model == "hf.co/ilsp/Llama-Krikri-8B-Instruct-GGUF:Q4_K_M"
+
+
 def run_all():
     tests = [
         test_defaults_match_previous_hardcoded_values,
         test_env_override,
         test_get_settings_is_a_cached_singleton,
+        test_resolved_gen_model_falls_back_to_ollama_model,
     ]
     for test in tests:
         test()

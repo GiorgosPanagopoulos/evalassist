@@ -40,7 +40,7 @@ class SemanticRetriever:
         self.embedder = embedder or Embedder()
         self.vectorstore = vectorstore or get_collection(chroma_dir)
         self.reranker = reranker or Reranker()
-        self.llm = llm or OllamaClient()
+        self.llm = llm or OllamaClient(model_name=_settings.resolved_gen_model)
         self.system_prompt, self.prompt_version = load_prompt("semantic_rag")
 
     def query(self, query_text: str, scope: IsolationScope) -> SemanticResult:

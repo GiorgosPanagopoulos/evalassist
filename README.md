@@ -257,6 +257,7 @@ All keys below live in `backend/.env.example`. Copy it to `backend/.env` and ove
 | `RERANKER_MODEL` | HuggingFace model id used for the cross-encoder reranker | No | `BAAI/bge-reranker-v2-m3` |
 | `OLLAMA_URL` | Base URL of the local Ollama server | No | `http://localhost:11434` |
 | `OLLAMA_MODEL` | Ollama model tag used for generation | No | `qwen2.5:14b` |
+| `OLLAMA_GEN_MODEL` | Separate model for semantic RAG answer generation only. Leave empty to use OLLAMA_MODEL. For fluent Greek, recommend a Greek-native model. | No | (empty, falls back to `OLLAMA_MODEL`) |
 | `TOP_K_RETRIEVE` | Chunks retrieved from ChromaDB before reranking | No | `20` |
 | `TOP_K_RERANK` | Chunks kept after reranking, passed to the LLM | No | `5` |
 | `ALLOWED_ORIGINS` | CORS origins allowed by the API | No | `["http://localhost:5173"]` |
