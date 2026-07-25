@@ -30,6 +30,8 @@ from app.retrieval.semantic import NO_DATA_ANSWER  # noqa: E402
 
 
 class FakeSemanticRetriever:
+    prompt_version = "v2"
+
     def query(self, query_text: str, scope) -> SemanticResult:
         return SemanticResult(
             answer="FAKE ANSWER",
@@ -38,21 +40,27 @@ class FakeSemanticRetriever:
             ],
             retrieved_doc_ids=["doc1"],
             model="fake-llm",
+            prompt_version="v2",
         )
 
 
 class FakeEmptySemanticRetriever:
+    prompt_version = "v2"
+
     def query(self, query_text: str, scope) -> SemanticResult:
         return SemanticResult(
             answer=NO_DATA_ANSWER,
             citations=[],
             retrieved_doc_ids=[],
             model="fake-llm",
+            prompt_version="v2",
         )
 
 
 class FakeLLMFailureAfterRetrievalRetriever:
     """Η ανάκτηση πέτυχε (doc_ids γνωστά) αλλά η κλήση LLM απέτυχε."""
+
+    prompt_version = "v2"
 
     def query(self, query_text: str, scope) -> SemanticResult:
         raise LLMUnavailableError("boom", retrieved_doc_ids=["DOC-1", "DOC-2"])
@@ -60,6 +68,8 @@ class FakeLLMFailureAfterRetrievalRetriever:
 
 class FakePreRetrievalFailureRetriever:
     """Αποτυχία πριν καν ανακτηθεί οτιδήποτε -> doc_ids πρέπει να μείνουν άδεια."""
+
+    prompt_version = "v2"
 
     def query(self, query_text: str, scope) -> SemanticResult:
         raise ValueError("δεν βρέθηκε έγκυρη πηγή δεδομένων")
@@ -129,6 +139,7 @@ def test_audit_row_has_semantic_mode_and_citation_doc_ids():
         assert row["id"] == audit_id
         assert row["mode"] == "semantic"
         assert json.loads(row["retrieved_doc_ids"]) == ["doc1"]
+        assert row["prompt_version"] == "v2"
     finally:
         _clear_overrides()
         os.remove(db_path)
@@ -154,6 +165,7 @@ def test_empty_scope_returns_200_with_empty_audit_doc_ids():
         row = _last_audit_row(db_path)
         assert row["mode"] == "semantic"
         assert json.loads(row["retrieved_doc_ids"]) == []
+        assert row["prompt_version"] == "v2"
     finally:
         _clear_overrides()
         os.remove(db_path)
@@ -184,6 +196,7 @@ def test_llm_failure_after_retrieval_audits_retrieved_doc_ids():
         assert len(rows) == 1
         assert rows[0]["mode"] == "semantic"
         assert json.loads(rows[0]["retrieved_doc_ids"]) == ["DOC-1", "DOC-2"]
+        assert rows[0]["prompt_version"] == "v2"
     finally:
         _clear_overrides()
         os.remove(db_path)
@@ -212,6 +225,7 @@ def test_pre_retrieval_failure_audits_empty_doc_ids():
 
         assert len(rows) == 1
         assert json.loads(rows[0]["retrieved_doc_ids"]) == []
+        assert rows[0]["prompt_version"] == "v2"
     finally:
         _clear_overrides()
         os.remove(db_path)

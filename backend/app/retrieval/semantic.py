@@ -60,6 +60,7 @@ class SemanticRetriever:
                 citations=[],
                 retrieved_doc_ids=[],
                 model=self.llm.model_name,
+                prompt_version=self.prompt_version,
             )
 
         reranked = self.reranker.rerank(query_text, documents, top_k=TOP_K_RERANK)
@@ -97,4 +98,5 @@ class SemanticRetriever:
             citations=citations,
             retrieved_doc_ids=retrieved_doc_ids,
             model=self.llm.model_name,
+            prompt_version=self.prompt_version,
         )
