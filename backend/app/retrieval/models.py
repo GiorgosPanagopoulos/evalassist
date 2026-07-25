@@ -38,3 +38,5 @@ class SemanticResult(BaseModel):
     # Query-routing suggestion (π.χ. "structured") — μόνο hint, το API/frontend
     # δεν παρακάμπτει ποτέ την επιλογή mode του χρήστη· βλ. app.retrieval.routing.
     routing_hint: str | None = None
+    # Έκδοση prompt που χρησιμοποιήθηκε (semantic only, structured -> None)
+    prompt_version: str | None = None

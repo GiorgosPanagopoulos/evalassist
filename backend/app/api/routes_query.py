@@ -24,9 +24,23 @@ from app.retrieval.structured import compare_periods, get_scores, top_bottom_sec
 router = APIRouter()
 
 
-def _audit(conn: sqlite3.Connection, user: str, query: str, doc_ids: list[str], mode: str) -> int:
+def _audit(
+    conn: sqlite3.Connection,
+    user: str,
+    query: str,
+    doc_ids: list[str],
+    mode: str,
+    prompt_version: str | None = None,
+) -> int:
     audit_id = write_audit(
-        conn, AuditEntry(user=user, query=query, retrieved_doc_ids=doc_ids, mode=mode)
+        conn,
+        AuditEntry(
+            user=user,
+            query=query,
+            retrieved_doc_ids=doc_ids,
+            mode=mode,
+            prompt_version=prompt_version,
+        ),
     )
     conn.commit()
     return audit_id
@@ -81,8 +95,10 @@ def query_semantic(
     except Exception as exc:
         if not doc_ids:
             doc_ids = getattr(exc, "retrieved_doc_ids", []) or []
-        _audit(conn, x_user, request.question, doc_ids, "semantic")
+        _audit(conn, x_user, request.question, doc_ids, "semantic", retriever.prompt_version)
         raise
 
-    audit_id = _audit(conn, x_user, request.question, doc_ids, "semantic")
+    audit_id = _audit(
+        conn, x_user, request.question, doc_ids, "semantic", result.prompt_version
+    )
     return SemanticQueryResponse(result=result, audit_id=audit_id)
