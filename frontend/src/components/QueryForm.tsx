@@ -165,7 +165,7 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange }: QueryFo
           className={SELECT_CLASS}
           style={personSelectStyle(personId)}
         >
-          <option value="">Μ-00000</option>
+          <option value="">Επιλέξτε άτομο</option>
           {persons.map((p) => (
             <option key={p.person_id} value={p.person_id}>
               {p.name ? `${p.name} (${p.person_id})` : `(${p.person_id})`}
