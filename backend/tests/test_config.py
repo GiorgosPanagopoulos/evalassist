@@ -27,6 +27,8 @@ def test_defaults_match_previous_hardcoded_values():
     assert settings.OLLAMA_MODEL == "qwen2.5:14b"
     assert settings.OLLAMA_GEN_MODEL == ""
     assert settings.OLLAMA_TIMEOUT_S == 120
+    assert settings.OLLAMA_TEMPERATURE == 0.0
+    assert settings.OLLAMA_SEED == 42
     assert settings.TOP_K_RETRIEVE == 20
     assert settings.TOP_K_RERANK == 5
     assert settings.ALLOWED_ORIGINS == ["http://localhost:5173"]
@@ -58,12 +60,25 @@ def test_resolved_gen_model_falls_back_to_ollama_model():
     assert settings.resolved_gen_model == "hf.co/ilsp/Llama-Krikri-8B-Instruct-GGUF:Q4_K_M"
 
 
+def test_deterministic_generation_env_override():
+    os.environ["OLLAMA_TEMPERATURE"] = "0.7"
+    os.environ["OLLAMA_SEED"] = "1337"
+    try:
+        settings = Settings(_env_file=None)
+        assert settings.OLLAMA_TEMPERATURE == 0.7
+        assert settings.OLLAMA_SEED == 1337
+    finally:
+        del os.environ["OLLAMA_TEMPERATURE"]
+        del os.environ["OLLAMA_SEED"]
+
+
 def run_all():
     tests = [
         test_defaults_match_previous_hardcoded_values,
         test_env_override,
         test_get_settings_is_a_cached_singleton,
         test_resolved_gen_model_falls_back_to_ollama_model,
+        test_deterministic_generation_env_override,
     ]
     for test in tests:
         test()

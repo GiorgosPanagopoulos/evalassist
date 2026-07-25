@@ -1,28 +1,29 @@
-"""Thin wrapper πάνω από το τοπικό Ollama chat API (qwen2.5:14b).
-
-Χωρίς cloud κλήσεις — μόνο τοπικό endpoint (localhost). Η σύνδεση είναι lazy:
+"""Thin wrapper πάνω από το τοπικό Ollama chat API.
+Χωρίς cloud κλήσεις, μόνο τοπικό endpoint (localhost). Η σύνδεση είναι lazy:
 δεν γίνεται κανένα HTTP call πριν την πρώτη `.generate()`.
 """
-
 import requests
 
 from app.core.config import get_settings
-
-MODEL_NAME = get_settings().OLLAMA_MODEL
-DEFAULT_BASE_URL = get_settings().OLLAMA_URL
-DEFAULT_TIMEOUT_S = get_settings().OLLAMA_TIMEOUT_S
 
 
 class OllamaClient:
     def __init__(
         self,
-        model_name: str = MODEL_NAME,
-        base_url: str = DEFAULT_BASE_URL,
-        timeout: int = DEFAULT_TIMEOUT_S,
+        model_name: str | None = None,
+        base_url: str | None = None,
+        timeout: int | None = None,
+        temperature: float | None = None,
+        seed: int | None = None,
     ):
-        self.model_name = model_name
-        self.base_url = base_url
-        self.timeout = timeout
+        settings = get_settings()
+        self.model_name = model_name if model_name is not None else settings.OLLAMA_MODEL
+        self.base_url = base_url if base_url is not None else settings.OLLAMA_URL
+        self.timeout = timeout if timeout is not None else settings.OLLAMA_TIMEOUT_S
+        self.temperature = (
+            temperature if temperature is not None else settings.OLLAMA_TEMPERATURE
+        )
+        self.seed = seed if seed is not None else settings.OLLAMA_SEED
 
     def generate(self, system: str, user: str) -> str:
         response = requests.post(
@@ -34,6 +35,10 @@ class OllamaClient:
                     {"role": "user", "content": user},
                 ],
                 "stream": False,
+                "options": {
+                    "temperature": self.temperature,
+                    "seed": self.seed,
+                },
             },
             timeout=self.timeout,
         )
