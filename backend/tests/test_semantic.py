@@ -37,6 +37,53 @@ class FakeVectorStore:
         return {"documents": [self._documents], "metadatas": [self._metadatas]}
 
 
+def _where_matches(where: dict, meta: dict) -> bool:
+    """Ελαφρύ simulation του ChromaDB where filter ($and/$or/$eq) πάνω σε
+    dict metadata, ώστε τα fake tests να ελέγχουν πραγματικό φιλτράρισμα
+    (όχι μόνο το σχήμα του where dict). Άγνωστο operator -> ValueError,
+    ΠΟΤΕ silent True (θα έκρυβε ψευδές isolation pass στα tests)."""
+    if len(where) != 1:
+        raise ValueError(f"unexpected where clause shape (expected single key): {where!r}")
+    (key, value), = where.items()
+
+    if key == "$and":
+        return all(_where_matches(clause, meta) for clause in value)
+    if key == "$or":
+        return any(_where_matches(clause, meta) for clause in value)
+    if key.startswith("$"):
+        raise ValueError(f"unsupported operator in where clause: {key!r}")
+
+    # key είναι όνομα πεδίου· value είτε literal είτε {"$eq": literal}
+    if isinstance(value, dict):
+        if set(value.keys()) != {"$eq"}:
+            raise ValueError(f"unsupported condition for field {key!r}: {value!r}")
+        expected = value["$eq"]
+    else:
+        expected = value
+    return meta.get(key) == expected
+
+
+class FakeFilteringVectorStore:
+    """Σε αντίθεση με το FakeVectorStore, εφαρμόζει πραγματικά το where
+    filter πάνω στα metadata, ώστε να ελέγχεται το isolation end-to-end
+    (career widening χωρίς διαρροή σε άλλο πρόσωπο)."""
+
+    def __init__(self, documents: list[str], metadatas: list[dict]):
+        self._documents = documents
+        self._metadatas = metadatas
+        self.last_where: dict | None = None
+
+    def query(self, query_embeddings, n_results, where):
+        self.last_where = where
+        matched_docs = []
+        matched_metas = []
+        for doc, meta in zip(self._documents, self._metadatas):
+            if _where_matches(where, meta):
+                matched_docs.append(doc)
+                matched_metas.append(meta)
+        return {"documents": [matched_docs[:n_results]], "metadatas": [matched_metas[:n_results]]}
+
+
 class FakeReranker:
     """Deterministic: κατατάσσει με βάση το μήκος του κειμένου (φθίνουσα)."""
 
@@ -199,6 +246,60 @@ def test_user_prompt_omits_person_name_when_absent_from_metadata():
     assert "person_name" not in llm.last_user
 
 
+def _make_two_person_career_chunks():
+    """2 fake πρόσωπα (Μ-00000, Μ-00001). Το Μ-00000 έχει chunk στη ζητούμενη
+    περίοδο (2025), career-wide chunk, ΚΑΙ chunk σε άλλη περίοδο (2024) που
+    ΔΕΝ πρέπει να επιστραφεί. Το Μ-00001 έχει αντίστοιχα period + career
+    chunks που δεν πρέπει ΠΟΤΕ να διαρρεύσουν στο query του Μ-00000."""
+    documents = [
+        "Μ-00000 - στοχοθεσία περιόδου 2025.",
+        "Μ-00000 - career: κρίσεις προαγωγών, τοποθετήσεις.",
+        "Μ-00000 - στοχοθεσία περιόδου 2024, ΔΕΝ πρέπει να επιστραφεί.",
+        "Μ-00001 - στοχοθεσία περιόδου 2025, ΔΕΝ πρέπει να επιστραφεί.",
+        "Μ-00001 - career: κρίσεις προαγωγών, ΔΕΝ πρέπει να επιστραφεί ποτέ.",
+    ]
+    metadatas = [
+        {"doc_id": "docA-period", "page": 1, "section": "Στοχοθεσία", "person_id": "Μ-00000", "period": "2025"},
+        {
+            "doc_id": "docA-career",
+            "page": 1,
+            "section": "ΚΡΙΣΕΙΣ ΠΡΟΑΓΩΓΩΝ",
+            "person_id": "Μ-00000",
+            "period": "career",
+        },
+        {
+            "doc_id": "docA-other-period",
+            "page": 1,
+            "section": "Στοχοθεσία",
+            "person_id": "Μ-00000",
+            "period": "2024",
+        },
+        {"doc_id": "docB-period", "page": 1, "section": "Στοχοθεσία", "person_id": "Μ-00001", "period": "2025"},
+        {
+            "doc_id": "docB-career",
+            "page": 1,
+            "section": "ΚΡΙΣΕΙΣ ΠΡΟΑΓΩΓΩΝ",
+            "person_id": "Μ-00001",
+            "period": "career",
+        },
+    ]
+    return documents, metadatas
+
+
+def test_career_chunks_included_without_leaking_other_person_or_period():
+    documents, metadatas = _make_two_person_career_chunks()
+    vectorstore = FakeFilteringVectorStore(documents, metadatas)
+    llm = FakeLLM()
+    scope = IsolationScope(person_id="Μ-00000", period="2025")
+    retriever = SemanticRetriever(
+        embedder=FakeEmbedder(), vectorstore=vectorstore, reranker=FakeReranker(), llm=llm
+    )
+
+    result = retriever.query("Ποιες ήταν οι τοποθετήσεις;", scope)
+
+    assert set(result.retrieved_doc_ids) == {"docA-period", "docA-career"}
+
+
 def run_all():
     tests = [
         test_isolation_where_filter_matches_scope,
@@ -207,6 +308,7 @@ def run_all():
         test_system_prompt_contains_tightened_instructions,
         test_user_prompt_includes_person_name_metadata_when_present,
         test_user_prompt_omits_person_name_when_absent_from_metadata,
+        test_career_chunks_included_without_leaking_other_person_or_period,
     ]
     for test in tests:
         test()

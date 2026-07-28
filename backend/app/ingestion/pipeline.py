@@ -9,7 +9,8 @@ Idempotent σε doc_id: re-run του ίδιου PDF (ίδιο περιεχόμ�
 `evaluations` (period = 'YYYY-MM-DD..YYYY-MM-DD') και ξεχωριστό chunk στο
 Chroma, με το πραγματικό κείμενο της περιόδου (όχι synthesized). Οι
 υπόλοιπες (career-wide, όχι per-period) ενότητες περνάνε με τη σύμβαση
-period='career' — τεκμηρίωση της σύμβασης, single source of truth εδώ.
+period='career' (CAREER_PERIOD, single source of truth στο
+app.models.evaluation).
 """
 
 import hashlib
@@ -24,14 +25,9 @@ from app.ingestion.embedder import Embedder
 from app.ingestion.extractor import extract_summary_note
 from app.ingestion.parser import parse_pdf
 from app.ingestion.vectorstore import CHROMA_DIR, add_chunks, delete_by_doc_id, get_collection
-from app.models.evaluation import KNOWN_SECTIONS, SummaryNote
+from app.models.evaluation import CAREER_PERIOD, KNOWN_SECTIONS, SummaryNote
 
 logger = logging.getLogger(__name__)
-
-# Σύμβαση period για ενότητες που δεν ανήκουν σε συγκεκριμένη περίοδο
-# αξιολόγησης (πτυχία, τοποθετήσεις, χρόνος υπηρεσίας, κρίσεις προαγωγών,
-# στοιχεία συνηγορούντα/μη, γενική ικανότητα) — αφορούν όλη τη σταδιοδρομία.
-CAREER_PERIOD = "career"
 
 _EVALUATION_SECTION = KNOWN_SECTIONS[-1]  # "ΣΥΝΟΛΙΚΗ ΕΜΦΑΝΙΣΗ - ΧΑΡΑΚΤΗΡΙΣΜΟΣ"
 
