@@ -6,6 +6,8 @@
 στο prompt του LLM.
 """
 
+import logging
+
 import requests
 
 from app.core.config import get_settings
@@ -16,7 +18,10 @@ from app.ingestion.vectorstore import CHROMA_DIR, get_collection
 from app.retrieval.isolation import IsolationScope
 from app.retrieval.llm import OllamaClient
 from app.retrieval.models import Citation, SemanticResult
+from app.retrieval.rank_validator import find_unsupported_ranks
 from app.retrieval.reranker import Reranker
+
+logger = logging.getLogger(__name__)
 
 _settings = get_settings()
 TOP_K_RETRIEVE = _settings.TOP_K_RETRIEVE
@@ -61,6 +66,7 @@ class SemanticRetriever:
                 retrieved_doc_ids=[],
                 model=self.llm.model_name,
                 prompt_version=self.prompt_version,
+                unsupported_ranks=[],
             )
 
         reranked = self.reranker.rerank(query_text, documents, top_k=TOP_K_RERANK)
@@ -93,10 +99,24 @@ class SemanticRetriever:
             # που ήδη ανακτήθηκαν, ακόμη κι αν η σύνθεση απάντησης αποτύχει.
             raise LLMUnavailableError(str(exc), retrieved_doc_ids=retrieved_doc_ids) from exc
 
+        # Φάση 1 rank validator: ελέγχει το ΙΔΙΟ user_prompt string που πήγε
+        # στο LLM ως context. Μόνο logging, δεν αλλάζει την απάντηση.
+        unsupported_ranks = find_unsupported_ranks(answer, user_prompt)
+        if unsupported_ranks:
+            logger.warning(
+                "Rank validator: μη τεκμηριωμένοι βαθμοί στην απάντηση "
+                "(doc_ids=%s, person_id=%s, prompt_version=%s): %s",
+                retrieved_doc_ids,
+                scope.person_id,
+                self.prompt_version,
+                unsupported_ranks,
+            )
+
         return SemanticResult(
             answer=answer,
             citations=citations,
             retrieved_doc_ids=retrieved_doc_ids,
             model=self.llm.model_name,
             prompt_version=self.prompt_version,
+            unsupported_ranks=unsupported_ranks,
         )

@@ -7,7 +7,7 @@
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class RetrievalMode(StrEnum):
@@ -40,3 +40,6 @@ class SemanticResult(BaseModel):
     routing_hint: str | None = None
     # Έκδοση prompt που χρησιμοποιήθηκε (semantic only, structured -> None)
     prompt_version: str | None = None
+    # Φάση 1 rank validator (μόνο logging): βαθμοί στην απάντηση χωρίς
+    # κανένα variant τους στο context που πήγε στο LLM.
+    unsupported_ranks: list[str] = Field(default_factory=list)

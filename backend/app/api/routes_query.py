@@ -31,6 +31,7 @@ def _audit(
     doc_ids: list[str],
     mode: str,
     prompt_version: str | None = None,
+    unsupported_ranks: list[str] | None = None,
 ) -> int:
     audit_id = write_audit(
         conn,
@@ -40,6 +41,7 @@ def _audit(
             retrieved_doc_ids=doc_ids,
             mode=mode,
             prompt_version=prompt_version,
+            unsupported_ranks=unsupported_ranks,
         ),
     )
     conn.commit()
@@ -99,6 +101,12 @@ def query_semantic(
         raise
 
     audit_id = _audit(
-        conn, x_user, request.question, doc_ids, "semantic", result.prompt_version
+        conn,
+        x_user,
+        request.question,
+        doc_ids,
+        "semantic",
+        result.prompt_version,
+        result.unsupported_ranks,
     )
     return SemanticQueryResponse(result=result, audit_id=audit_id)
