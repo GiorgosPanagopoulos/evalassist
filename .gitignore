@@ -42,3 +42,6 @@ frontend/.vite/
 private/
 
 .venv/
+
+# Local LLM benchmark artifacts (exploration, not for main)
+evals/greek_llm_benchmark/
