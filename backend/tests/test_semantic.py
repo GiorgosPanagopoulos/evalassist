@@ -180,6 +180,7 @@ def test_empty_scope_skips_llm_call():
     assert result.answer == NO_DATA_ANSWER
     assert result.citations == []
     assert result.retrieved_doc_ids == []
+    assert result.unsupported_ranks == []
     assert llm.calls == 0
     assert vectorstore.last_where == scope.build_chroma_where()
 
@@ -246,6 +247,35 @@ def test_user_prompt_omits_person_name_when_absent_from_metadata():
     assert "person_name" not in llm.last_user
 
 
+class FakeLLMWithUnsupportedRank(FakeLLM):
+    """Επιστρέφει βαθμό που ΔΕΝ υπάρχει στα ανακτημένα αποσπάσματα (real
+    incident: ΠΧΗΣ στο context, "Υπλγού" στην απάντηση)."""
+
+    def generate(self, system: str, user: str) -> str:
+        self.calls += 1
+        self.last_system = system
+        self.last_user = user
+        return "με βαθμό Υπλγού"
+
+
+def test_rank_validator_flags_unsupported_rank_in_real_pipeline():
+    """Φάση 1 rank validator: επαλήθευση end-to-end μέσα από το πραγματικό
+    SemanticRetriever.query() (όχι μόνο την απομονωμένη συνάρτηση), ώστε ένα
+    regression στη σύνδεση semantic.py <-> rank_validator.py να πιάνεται εδώ."""
+    documents, metadatas = _make_chunks()
+    vectorstore = FakeVectorStore(documents, metadatas)
+    llm = FakeLLMWithUnsupportedRank()
+    scope = IsolationScope(person_id="p1", period="2025")
+    retriever = SemanticRetriever(
+        embedder=FakeEmbedder(), vectorstore=vectorstore, reranker=FakeReranker(), llm=llm
+    )
+
+    result = retriever.query("Πώς ήταν η στοχοθεσία;", scope)
+
+    assert result.answer == "με βαθμό Υπλγού"
+    assert result.unsupported_ranks == ["ΥΠΟΛΟΧΑΓΟΣ"]
+
+
 def _make_two_person_career_chunks():
     """2 fake πρόσωπα (Μ-00000, Μ-00001). Το Μ-00000 έχει chunk στη ζητούμενη
     περίοδο (2025), career-wide chunk, ΚΑΙ chunk σε άλλη περίοδο (2024) που
@@ -305,6 +335,7 @@ def run_all():
         test_isolation_where_filter_matches_scope,
         test_citations_match_reranked_top_k,
         test_empty_scope_skips_llm_call,
+        test_rank_validator_flags_unsupported_rank_in_real_pipeline,
         test_system_prompt_contains_tightened_instructions,
         test_user_prompt_includes_person_name_metadata_when_present,
         test_user_prompt_omits_person_name_when_absent_from_metadata,

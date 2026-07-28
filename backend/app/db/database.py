@@ -16,12 +16,13 @@ def get_connection(db_path: Path = DB_PATH) -> sqlite3.Connection:
 
 
 def _migrate_audit_log(conn: sqlite3.Connection) -> None:
-    """Migration-safe προσθήκη της prompt_version στήλης σε DBs που
-    δημιουργήθηκαν πριν από αυτήν (CREATE TABLE IF NOT EXISTS δεν αλλάζει
-    υπάρχοντα schema)."""
+    """Migration-safe προσθήκη στηλών σε DBs που δημιουργήθηκαν πριν από αυτές
+    (CREATE TABLE IF NOT EXISTS δεν αλλάζει υπάρχοντα schema)."""
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(audit_log)")}
     if columns and "prompt_version" not in columns:
         conn.execute("ALTER TABLE audit_log ADD COLUMN prompt_version TEXT")
+    if columns and "unsupported_ranks" not in columns:
+        conn.execute("ALTER TABLE audit_log ADD COLUMN unsupported_ranks TEXT")
 
 
 def init_db(db_path: Path = DB_PATH) -> None:

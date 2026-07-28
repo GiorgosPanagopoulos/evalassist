@@ -41,6 +41,7 @@ class FakeSemanticRetriever:
             retrieved_doc_ids=["doc1"],
             model="fake-llm",
             prompt_version="v2",
+            unsupported_ranks=[],
         )
 
 
@@ -54,6 +55,25 @@ class FakeEmptySemanticRetriever:
             retrieved_doc_ids=[],
             model="fake-llm",
             prompt_version="v2",
+            unsupported_ranks=[],
+        )
+
+
+class FakeUnsupportedRankSemanticRetriever:
+    """Simulate Φάση 1 rank validator flag (μη τεκμηριωμένος βαθμός)."""
+
+    prompt_version = "v2"
+
+    def query(self, query_text: str, scope) -> SemanticResult:
+        return SemanticResult(
+            answer="με βαθμό Υπλγού",
+            citations=[
+                Citation(doc_id="doc1", page=1, section="Στοχοθεσία", score=0.9),
+            ],
+            retrieved_doc_ids=["doc1"],
+            model="fake-llm",
+            prompt_version="v2",
+            unsupported_ranks=["ΥΠΟΛΟΧΑΓΟΣ"],
         )
 
 
@@ -140,6 +160,33 @@ def test_audit_row_has_semantic_mode_and_citation_doc_ids():
         assert row["mode"] == "semantic"
         assert json.loads(row["retrieved_doc_ids"]) == ["doc1"]
         assert row["prompt_version"] == "v2"
+        assert json.loads(row["unsupported_ranks"]) == []
+    finally:
+        _clear_overrides()
+        os.remove(db_path)
+
+
+def test_audit_row_records_unsupported_ranks_when_flagged():
+    """Φάση 1 rank validator: το audit_log καταγράφει τους μη τεκμηριωμένους
+    βαθμούς, χωρίς να αλλάζει την απάντηση προς τον χρήστη (logging only)."""
+    db_path = _make_temp_db()
+    try:
+        _override_settings(db_path)
+        app.dependency_overrides[get_semantic_retriever] = lambda: (
+            FakeUnsupportedRankSemanticRetriever()
+        )
+        client = TestClient(app)
+
+        response = client.post(
+            "/query/semantic",
+            json={"person_id": "p1", "period": "2025", "question": "Πώς ήταν η στοχοθεσία;"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["result"]["answer"] == "με βαθμό Υπλγού"
+
+        row = _last_audit_row(db_path)
+        assert json.loads(row["unsupported_ranks"]) == ["ΥΠΟΛΟΧΑΓΟΣ"]
     finally:
         _clear_overrides()
         os.remove(db_path)
@@ -197,6 +244,7 @@ def test_llm_failure_after_retrieval_audits_retrieved_doc_ids():
         assert rows[0]["mode"] == "semantic"
         assert json.loads(rows[0]["retrieved_doc_ids"]) == ["DOC-1", "DOC-2"]
         assert rows[0]["prompt_version"] == "v2"
+        assert rows[0]["unsupported_ranks"] is None
     finally:
         _clear_overrides()
         os.remove(db_path)
@@ -279,6 +327,7 @@ def run_all():
     tests = [
         test_response_embeds_result_and_audit_id,
         test_audit_row_has_semantic_mode_and_citation_doc_ids,
+        test_audit_row_records_unsupported_ranks_when_flagged,
         test_empty_scope_returns_200_with_empty_audit_doc_ids,
         test_llm_failure_after_retrieval_audits_retrieved_doc_ids,
         test_pre_retrieval_failure_audits_empty_doc_ids,
