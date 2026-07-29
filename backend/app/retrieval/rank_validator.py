@@ -91,20 +91,40 @@ def normalize(text: str) -> str:
     return text.replace(".", "")
 
 
-# stems ταξινομημένα από το μακρύτερο στο κοντύτερο, ώστε το ΑΝΘΥΠΟΠΛΟΙΑΡΧ
-# να ματσάρει πριν το ΠΛΟΙΑΡΧ (substring trap).
+def _shorten_stem(stem: str) -> str:
+    """Οι συντομογραφίες βαθμών (ΠΧΟΣ, ΑΝΘΣΤΗΣ, ΛΧΣ) έχουν το τελικό Σ
+    ενσωματωμένο στο stem, οπότε δεν έμενε χώρος για κλιτές μορφές πέραν
+    της ονομαστικής (ΠΧΟ αιτιατική, ΠΧΟΥ γενική). Κόβουμε το τελικό Σ."""
+    if stem.endswith("Σ") and len(stem) - 1 >= 2:
+        return stem[:-1]
+    return stem
+
+
+_RAW_STEMS = [(stem, canonical) for canonical, stems in KNOWN_RANKS.items() for stem in stems]
+
+# stems ταξινομημένα από το μακρύτερο στο κοντύτερο ΜΕΤΑ την κοπή του
+# τελικού Σ, ώστε το ΑΝΘΥΠΟΠΛΟΙΑΡΧ να ματσάρει πριν το ΠΛΟΙΑΡΧ (substring trap).
 _ALL_STEMS: list[tuple[str, str]] = sorted(
-    ((stem, canonical) for canonical, stems in KNOWN_RANKS.items() for stem in stems),
+    ((_shorten_stem(stem), canonical) for stem, canonical in _RAW_STEMS),
     key=lambda pair: len(pair[0]),
     reverse=True,
 )
 
+# Στα κομμένα stems το φωνήεν της πτώσης είναι ήδη μέσα στο stem (π.χ. ΠΧΟ),
+# οπότε τα κοινά _ENDINGS (ΟΣ/ΟΥ κ.λπ.) θα διπλασίαζαν το φωνήεν. Χρειάζονται
+# μόνο Σ/Υ σκέτα για να ξαναφτιάξουν ονομαστική (ΠΧΟΣ) και γενική (ΠΧΟΥ).
+_SHORTENED_STEMS = {_shorten_stem(stem) for stem, _ in _RAW_STEMS if _shorten_stem(stem) != stem}
+
 _ENDING_PATTERN = "|".join(_ENDINGS)
+_SHORTENED_ENDING_PATTERN = "|".join((*_ENDINGS, "Σ", "Υ"))
 
 
 def _build_pattern() -> re.Pattern:
-    stems_pattern = "|".join(re.escape(stem) for stem, _ in _ALL_STEMS)
-    return re.compile(rf"(?<![Α-ΩA-Z])(?:{stems_pattern})(?:{_ENDING_PATTERN})?(?![Α-ΩA-Z])")
+    branches = []
+    for stem, _ in _ALL_STEMS:
+        endings = _SHORTENED_ENDING_PATTERN if stem in _SHORTENED_STEMS else _ENDING_PATTERN
+        branches.append(rf"(?:{re.escape(stem)})(?:{endings})?")
+    return re.compile(rf"(?<![Α-ΩA-Z])(?:{'|'.join(branches)})(?![Α-ΩA-Z])")
 
 
 _PATTERN = _build_pattern()
