@@ -23,6 +23,7 @@ from app.db.database import DB_PATH, get_connection, init_db
 from app.ingestion.chunker import PageText, chunk_by_section, split_text_if_long
 from app.ingestion.embedder import Embedder
 from app.ingestion.extractor import extract_summary_note
+from app.ingestion.form_markers import annotate_empty_section5_subfields
 from app.ingestion.parser import parse_pdf
 from app.ingestion.vectorstore import CHROMA_DIR, add_chunks, delete_by_doc_id, get_collection
 from app.models.evaluation import CAREER_PERIOD, KNOWN_SECTIONS, SummaryNote
@@ -30,6 +31,7 @@ from app.models.evaluation import CAREER_PERIOD, KNOWN_SECTIONS, SummaryNote
 logger = logging.getLogger(__name__)
 
 _EVALUATION_SECTION = KNOWN_SECTIONS[-1]  # "ΣΥΝΟΛΙΚΗ ΕΜΦΑΝΙΣΗ - ΧΑΡΑΚΤΗΡΙΣΜΟΣ"
+_SUPPORTING_FACTORS_SECTION = KNOWN_SECTIONS[4]  # "ΣΤΟΙΧΕΙΑ ΣΥΝΗΓΟΡΟΥΝΤΑ Ή ΜΗ"
 
 
 @dataclass
@@ -116,8 +118,16 @@ def run_ingestion(
             )
             periods.append(CAREER_PERIOD)
             for chunk in career_chunks:
+                # Μαρκάρισμα κενών υποπεδίων Ενότητας 5 ΜΟΝΟ στο κείμενο που
+                # πάει για indexing (indexed_text), ΠΟΤΕ στο chunk.text: το
+                # extract_summary_note (και το _parse_health μέσα του) έχει
+                # ήδη τρέξει παραπάνω πάνω στα ίδια section_chunks - αν
+                # μολυνθεί το chunk.text θα χαλούσε το structured parsing.
+                indexed_text = chunk.text
+                if chunk.section == _SUPPORTING_FACTORS_SECTION:
+                    indexed_text = annotate_empty_section5_subfields(indexed_text)
                 add_chunk(
-                    chunk.text, CAREER_PERIOD, chunk.section or "Άγνωστη Ενότητα", chunk.page
+                    indexed_text, CAREER_PERIOD, chunk.section or "Άγνωστη Ενότητα", chunk.page
                 )
 
         conn.commit()
