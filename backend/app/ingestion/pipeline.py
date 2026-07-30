@@ -24,6 +24,7 @@ from app.ingestion.chunker import PageText, chunk_by_section, split_text_if_long
 from app.ingestion.embedder import Embedder
 from app.ingestion.extractor import extract_summary_note
 from app.ingestion.form_markers import annotate_empty_section5_subfields
+from app.ingestion.homoglyphs import normalize_greek_homoglyphs
 from app.ingestion.parser import parse_pdf
 from app.ingestion.promotion_table import annotate_promotion_table
 from app.ingestion.vectorstore import CHROMA_DIR, add_chunks, delete_by_doc_id, get_collection
@@ -105,8 +106,14 @@ def run_ingestion(
                 conn, doc_id, person_id, entry.period, str(pdf_path), len(pages)
             )
             periods.append(entry.period)
+            # Κανονικοποίηση ομογράφων ΜΟΝΟ στο κείμενο που πάει για indexing
+            # (indexed_raw_text), ΠΟΤΕ στο raw_text/SectionChunk.text: το
+            # extract_summary_note έχει ήδη τρέξει παραπάνω πάνω στο
+            # ακατέργαστο section_chunks - βλ. ίδιο σκεπτικό στο
+            # annotate_empty_section5_subfields παρακάτω.
+            indexed_raw_text = normalize_greek_homoglyphs(raw_text)
             add_chunk(
-                raw_text,
+                indexed_raw_text,
                 entry.period,
                 _EVALUATION_SECTION,
                 entry.source_page,
@@ -120,12 +127,13 @@ def run_ingestion(
             )
             periods.append(CAREER_PERIOD)
             for chunk in career_chunks:
-                # Μαρκάρισμα κενών υποπεδίων Ενότητας 5 ΜΟΝΟ στο κείμενο που
-                # πάει για indexing (indexed_text), ΠΟΤΕ στο chunk.text: το
-                # extract_summary_note (και το _parse_health μέσα του) έχει
-                # ήδη τρέξει παραπάνω πάνω στα ίδια section_chunks - αν
-                # μολυνθεί το chunk.text θα χαλούσε το structured parsing.
-                indexed_text = chunk.text
+                # Κανονικοποίηση ομογράφων + μαρκάρισμα κενών υποπεδίων
+                # Ενότητας 5 ΜΟΝΟ στο κείμενο που πάει για indexing
+                # (indexed_text), ΠΟΤΕ στο chunk.text: το extract_summary_note
+                # (και το _parse_health μέσα του) έχει ήδη τρέξει παραπάνω
+                # πάνω στα ίδια section_chunks - αν μολυνθεί το chunk.text θα
+                # χαλούσε το structured parsing.
+                indexed_text = normalize_greek_homoglyphs(chunk.text)
                 if chunk.section == _SUPPORTING_FACTORS_SECTION:
                     indexed_text = annotate_empty_section5_subfields(indexed_text)
                 if chunk.section == _PROMOTIONS_SECTION:
