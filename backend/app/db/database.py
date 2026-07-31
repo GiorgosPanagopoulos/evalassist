@@ -23,6 +23,8 @@ def _migrate_audit_log(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE audit_log ADD COLUMN prompt_version TEXT")
     if columns and "unsupported_ranks" not in columns:
         conn.execute("ALTER TABLE audit_log ADD COLUMN unsupported_ranks TEXT")
+    if columns and "answer_text" not in columns:
+        conn.execute("ALTER TABLE audit_log ADD COLUMN answer_text TEXT")
 
 
 def init_db(db_path: Path = DB_PATH) -> None:

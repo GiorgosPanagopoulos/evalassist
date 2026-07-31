@@ -4,6 +4,8 @@
 και γράφει ακριβώς μία γραμμή στο audit_log ανά κλήση — ακόμη και όταν η
 επεξεργασία μετά την ανάκτηση αποτύχει (audit πριν το re-raise)."""
 
+import json
+import logging
 import sqlite3
 
 from fastapi import APIRouter, Depends, Header
@@ -22,6 +24,7 @@ from app.retrieval.semantic import SemanticRetriever
 from app.retrieval.structured import compare_periods, get_scores, top_bottom_sections
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _audit(
@@ -32,6 +35,7 @@ def _audit(
     mode: str,
     prompt_version: str | None = None,
     unsupported_ranks: list[str] | None = None,
+    answer_text: str | None = None,
 ) -> int:
     audit_id = write_audit(
         conn,
@@ -42,6 +46,7 @@ def _audit(
             mode=mode,
             prompt_version=prompt_version,
             unsupported_ranks=unsupported_ranks,
+            answer_text=answer_text,
         ),
     )
     conn.commit()
@@ -72,7 +77,13 @@ def query_structured(
         _audit(conn, x_user, request.model_dump_json(), doc_ids, "structured")
         raise
 
-    audit_id = _audit(conn, x_user, request.model_dump_json(), doc_ids, "structured")
+    try:
+        answer_text = json.dumps(result.data, ensure_ascii=False)
+    except (TypeError, ValueError):
+        # Fail safe: το audit record έχει προτεραιότητα έναντι του answer_text.
+        logger.warning("Αποτυχία serialization του result.data για audit", exc_info=True)
+        answer_text = None
+    audit_id = _audit(conn, x_user, request.model_dump_json(), doc_ids, "structured", answer_text=answer_text)
     return StructuredQueryResponse(result=result, audit_id=audit_id)
 
 
@@ -108,5 +119,6 @@ def query_semantic(
         "semantic",
         result.prompt_version,
         result.unsupported_ranks,
+        answer_text=result.answer,
     )
     return SemanticQueryResponse(result=result, audit_id=audit_id)
