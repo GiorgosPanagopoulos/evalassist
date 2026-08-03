@@ -28,6 +28,7 @@ import re
 from datetime import date
 
 from app.ingestion.chunker import SectionChunk
+from app.ingestion.homoglyphs import LATIN_TO_GREEK_UPPER
 from app.models.evaluation import (
     CHARACTERIZATIONS,
     DegreeEntry,
@@ -330,12 +331,10 @@ _EVALUATOR_LABEL_RE = re.compile(r"^Αξιολογών\s*:\s*(.*)$")
 # Font substitution σε πραγματικά PDF: κάποιοι Έλληνικοί χαρακτήρες
 # εμφανίζονται ως λατινικά ομόγραφα (π.χ. "EΞΑΙΡΕΤΟΣ" με λατινικό "E").
 # Απαραίτητο για να αναγνωριστεί ο χαρακτηρισμός έναντι του CHARACTERIZATIONS.
-_LATIN_TO_GREEK_UPPER = str.maketrans(
-    {
-        "A": "Α", "B": "Β", "E": "Ε", "Z": "Ζ", "H": "Η", "I": "Ι", "K": "Κ",
-        "M": "Μ", "N": "Ν", "O": "Ο", "P": "Ρ", "T": "Τ", "Y": "Υ", "X": "Χ",
-    }
-)
+# Ο πίνακας ζει πλέον στο app.ingestion.homoglyphs (single source of truth,
+# χρησιμοποιείται και από το ingestion pipeline για κανονικοποίηση chunk
+# text) - το όνομα εδώ διατηρείται ως alias για backward compat.
+_LATIN_TO_GREEK_UPPER = LATIN_TO_GREEK_UPPER
 
 
 def _split_positional_blocks(text: str) -> list[tuple[str, str, int]]:
