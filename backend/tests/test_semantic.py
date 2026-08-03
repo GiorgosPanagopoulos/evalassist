@@ -10,6 +10,7 @@
 Εκτελείται standalone: `python tests/test_semantic.py`
 """
 
+import re
 import sys
 from pathlib import Path
 
@@ -186,9 +187,10 @@ def test_empty_scope_skips_llm_call():
 
 
 def test_system_prompt_contains_tightened_instructions():
-    """Φάση B1: το system prompt (v2) πρέπει να περιέχει τις νέες οδηγίες
+    """Φάση B1: το ενεργό system prompt πρέπει να περιέχει τις οδηγίες
     σφιξίματος — απάντηση μόνο στο ζητούμενο, ρητή δήλωση όταν λείπει από τα
-    αποσπάσματα, ονόματα/βαθμοί μόνο αυτούσια από αποσπάσματα ή person_name."""
+    αποσπάσματα, ονόματα/βαθμοί μόνο αυτούσια από αποσπάσματα ή person_name.
+    Ο έλεγχος δεν δεσμεύεται σε συγκεκριμένο αριθμό έκδοσης του prompt."""
     documents, metadatas = _make_chunks()
     vectorstore = FakeVectorStore(documents, metadatas)
     llm = FakeLLM()
@@ -199,10 +201,12 @@ def test_system_prompt_contains_tightened_instructions():
 
     retriever.query("Πώς ήταν η στοχοθεσία;", scope)
 
-    assert retriever.prompt_version == "v2"
+    assert re.fullmatch(r"v\d+", retriever.prompt_version)
     assert "Δεν βρέθηκε στα διαθέσιμα αποσπάσματα." in llm.last_system
     assert "ΑΠΟΚΛΕΙΣΤΙΚΑ στο ερώτημα" in llm.last_system
     assert "person_name" in llm.last_system
+    assert "ΟΥΔΕΝ ΚΑΤΑΧΩΡΗΜΕΝΟ" in llm.last_system
+    assert "ΔΙΑΦΟΡΕΤΙΚΗ" in llm.last_system
 
 
 def test_user_prompt_includes_person_name_metadata_when_present():
