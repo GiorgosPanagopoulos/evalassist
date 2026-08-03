@@ -24,6 +24,12 @@ jobs:
       - name: Install backend dependencies (CI subset, no ML deps)
         run: pip install -r backend/requirements-ci.txt
 
+      - name: Install ruff
+        run: pip install ruff==0.15.16
+
+      - name: Lint backend (ruff)
+        run: ruff check backend/app backend/tests
+
       - name: Install fonts with greek glyph coverage
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-dejavu-core
 
@@ -55,6 +61,12 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm ci
+
+      - name: Lint (oxlint)
+        run: npm run lint
+
+      - name: Typecheck (tsc --noEmit)
+        run: npx tsc --noEmit
 
       - name: Build
         run: npm run build
