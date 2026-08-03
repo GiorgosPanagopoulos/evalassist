@@ -5,8 +5,9 @@
 μέσω prompt στο LLM.
 """
 
-from app.models.evaluation import CAREER_PERIOD
 from pydantic import BaseModel
+
+from app.models.evaluation import CAREER_PERIOD
 
 
 class IsolationScope(BaseModel):
