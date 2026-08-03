@@ -18,6 +18,9 @@ class AuditEntry(BaseModel):
     # Φάση 1 rank validator (μόνο logging): None όταν δεν εφαρμόζεται
     # (structured mode) ή σε error path, JSON λίστα στο semantic success path.
     unsupported_ranks: list[str] | None = None
+    # Στο semantic mode είναι το κείμενο της απάντησης του LLM, στο structured
+    # mode το serialized result data, και None στα error paths.
+    answer_text: str | None = None
 
 
 def write_audit(conn: sqlite3.Connection, entry: AuditEntry) -> int:
@@ -25,8 +28,8 @@ def write_audit(conn: sqlite3.Connection, entry: AuditEntry) -> int:
     cursor = conn.execute(
         """
         INSERT INTO audit_log
-            (user, query, retrieved_doc_ids, mode, prompt_version, unsupported_ranks)
-        VALUES (?, ?, ?, ?, ?, ?)
+            (user, query, retrieved_doc_ids, mode, prompt_version, unsupported_ranks, answer_text)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (
             entry.user,
@@ -35,6 +38,7 @@ def write_audit(conn: sqlite3.Connection, entry: AuditEntry) -> int:
             entry.mode,
             entry.prompt_version,
             json.dumps(entry.unsupported_ranks) if entry.unsupported_ranks is not None else None,
+            entry.answer_text,
         ),
     )
     return cursor.lastrowid

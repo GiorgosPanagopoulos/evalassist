@@ -66,8 +66,26 @@ CREATE TABLE IF NOT EXISTS audit_log (
     retrieved_doc_ids   TEXT,
     mode                TEXT NOT NULL CHECK (mode IN ('structured', 'semantic')),
     prompt_version      TEXT,
-    unsupported_ranks   TEXT
+    unsupported_ranks   TEXT,
+    answer_text         TEXT
 );
+
+-- Τα δύο triggers μπλοκάρουν UPDATE/DELETE στο audit_log μέσω DML από την
+-- εφαρμογή, ώστε το append-only trail να επιβάλλεται σε επίπεδο schema και
+-- όχι μόνο σε επίπεδο convention. Δεν εμποδίζουν DDL (π.χ. ALTER TABLE για
+-- migrations, δες _migrate_audit_log) και δεν προστατεύουν από κάποιον με
+-- απευθείας filesystem access στο .db αρχείο.
+CREATE TRIGGER IF NOT EXISTS audit_log_no_update
+BEFORE UPDATE ON audit_log
+BEGIN
+    SELECT RAISE(ABORT, 'audit_log is append-only: UPDATE is not allowed');
+END;
+
+CREATE TRIGGER IF NOT EXISTS audit_log_no_delete
+BEFORE DELETE ON audit_log
+BEGIN
+    SELECT RAISE(ABORT, 'audit_log is append-only: DELETE is not allowed');
+END;
 
 CREATE INDEX IF NOT EXISTS idx_evaluations_person_period ON evaluations(person_id, period);
 CREATE INDEX IF NOT EXISTS idx_field_scores_eval_id ON field_scores(eval_id);
