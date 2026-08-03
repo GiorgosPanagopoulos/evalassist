@@ -31,13 +31,13 @@ from app.ingestion.chunker import SectionChunk
 from app.ingestion.homoglyphs import LATIN_TO_GREEK_UPPER
 from app.models.evaluation import (
     CHARACTERIZATIONS,
+    FIELD_CODE_LABELS,
+    KNOWN_SECTIONS,
     DegreeEntry,
     EvaluationEntry,
     EvaluatorInfo,
-    FIELD_CODE_LABELS,
     FieldScore,
     HealthEntry,
-    KNOWN_SECTIONS,
     PersonInfo,
     PostingEntry,
     PromotionEntry,
@@ -454,8 +454,8 @@ def _parse_evaluation_entry_positional(ea_type: str, block: str, page: int) -> E
         return None
 
     rest = lines[idx:]
-    evaluator_idx = next((i for i, l in enumerate(rest) if _EVALUATOR_LABEL_RE.match(l)), len(rest))
-    unit_lines = [l for l in rest[:evaluator_idx] if l != "-" and not l.isdigit()]
+    evaluator_idx = next((i for i, line in enumerate(rest) if _EVALUATOR_LABEL_RE.match(line)), len(rest))
+    unit_lines = [line for line in rest[:evaluator_idx] if line != "-" and not line.isdigit()]
     unit = unit_lines[0] if unit_lines else ""
 
     evaluator_raw = None
