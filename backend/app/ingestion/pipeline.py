@@ -25,6 +25,7 @@ from app.ingestion.embedder import Embedder
 from app.ingestion.extractor import extract_summary_note
 from app.ingestion.form_markers import annotate_empty_section5_subfields
 from app.ingestion.parser import parse_pdf
+from app.ingestion.promotion_table import annotate_promotion_table
 from app.ingestion.vectorstore import CHROMA_DIR, add_chunks, delete_by_doc_id, get_collection
 from app.models.evaluation import CAREER_PERIOD, KNOWN_SECTIONS, SummaryNote
 
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 _EVALUATION_SECTION = KNOWN_SECTIONS[-1]  # "ΣΥΝΟΛΙΚΗ ΕΜΦΑΝΙΣΗ - ΧΑΡΑΚΤΗΡΙΣΜΟΣ"
 _SUPPORTING_FACTORS_SECTION = KNOWN_SECTIONS[4]  # "ΣΤΟΙΧΕΙΑ ΣΥΝΗΓΟΡΟΥΝΤΑ Ή ΜΗ"
+_PROMOTIONS_SECTION = KNOWN_SECTIONS[0]  # "ΚΡΙΣΕΙΣ ΠΡΟΑΓΩΓΩΝ"
 
 
 @dataclass
@@ -126,6 +128,8 @@ def run_ingestion(
                 indexed_text = chunk.text
                 if chunk.section == _SUPPORTING_FACTORS_SECTION:
                     indexed_text = annotate_empty_section5_subfields(indexed_text)
+                if chunk.section == _PROMOTIONS_SECTION:
+                    indexed_text = annotate_promotion_table(indexed_text)
                 add_chunk(
                     indexed_text, CAREER_PERIOD, chunk.section or "Άγνωστη Ενότητα", chunk.page
                 )
