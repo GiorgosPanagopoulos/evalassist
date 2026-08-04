@@ -111,6 +111,28 @@ def replace_promotions(conn: sqlite3.Connection, person_id: str, rows: list[dict
     )
 
 
+def replace_service_time(conn: sqlite3.Connection, person_id: str, rows: list[dict]) -> None:
+    conn.execute("DELETE FROM service_time WHERE person_id = ?", (person_id,))
+    conn.executemany(
+        """
+        INSERT INTO service_time (person_id, row_index, subsection, label, years, months, days)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (
+                person_id,
+                i,
+                row["subsection"],
+                row["label"],
+                row["years"],
+                row["months"],
+                row["days"],
+            )
+            for i, row in enumerate(rows)
+        ],
+    )
+
+
 def upsert_document(
     conn: sqlite3.Connection,
     doc_id: str,
