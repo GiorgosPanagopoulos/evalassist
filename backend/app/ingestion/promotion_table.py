@@ -87,6 +87,44 @@ def _format_row(rank: str, decision_date: str, decision: str, promotion_date: st
     )
 
 
+def _parse_group(group: list[str]) -> dict | None:
+    """Single source of truth για το τι είναι μία «έγκυρη» ομάδα γραμμών του
+    πίνακα ΚΡΙΣΕΙΣ ΠΡΟΑΓΩΓΩΝ: την καλούν και το annotate_promotion_table (μέσω
+    _annotate) και το parse_promotion_rows (μέσω _parse_rows).
+
+    Επιστρέφει None αν η ομάδα πρέπει να μείνει αμετάβλητη/αγνοηθεί (λιγότερες
+    από 4 μη κενές γραμμές - άγνωστη δομή, ή ήδη επισημασμένη - idempotency).
+    Αλλιώς επιστρέφει dict με κλειδιά rank/decision_date/decision/promotion_date
+    (τιμές πάντα str, αυτούσιες όπως στο PDF)."""
+    if len(group) < 4 or any(line.strip().startswith(_IDEMPOTENCY_PREFIX) for line in group):
+        return None
+    rank = group[0].strip()
+    decision_date = group[1].strip()
+    promotion_date = group[-1].strip()
+    decision = _merge_decision_lines(group[2:-1])
+    return {
+        "rank": rank,
+        "decision_date": decision_date,
+        "decision": decision,
+        "promotion_date": promotion_date,
+    }
+
+
+def _iter_row_groups(remainder: list[str]):
+    """Χωρίζει τις γραμμές μετά την επικεφαλίδα σε ομάδες μη κενών γραμμών
+    (μία ομάδα ανά σειρά πίνακα), αγνοώντας τις κενές γραμμές ανάμεσά τους."""
+    i = 0
+    while i < len(remainder):
+        if remainder[i].strip() == "":
+            i += 1
+            continue
+        j = i
+        while j < len(remainder) and remainder[j].strip() != "":
+            j += 1
+        yield remainder[i:j]
+        i = j
+
+
 def _annotate(text: str) -> str:
     lines = text.split("\n")
     header_end = _find_header_end(lines)
@@ -110,16 +148,52 @@ def _annotate(text: str) -> str:
         group = remainder[i:j]
         i = j
 
-        if len(group) < 4 or any(
-            line.strip().startswith(_IDEMPOTENCY_PREFIX) for line in group
-        ):
+        parsed = _parse_group(group)
+        if parsed is None:
             out_lines.extend(group)
             continue
 
-        rank = group[0].strip()
-        decision_date = group[1].strip()
-        promotion_date = group[-1].strip()
-        decision = _merge_decision_lines(group[2:-1])
-        out_lines.append(_format_row(rank, decision_date, decision, promotion_date))
+        out_lines.append(_format_row(**parsed))
 
     return "\n".join(prefix_lines + out_lines)
+
+
+def _parse_rows(text: str) -> list[dict]:
+    lines = text.split("\n")
+    header_end = _find_header_end(lines)
+    if header_end is None:
+        return []
+
+    remainder = lines[header_end + 1 :]
+    rows: list[dict] = []
+    for group in _iter_row_groups(remainder):
+        parsed = _parse_group(group)
+        if parsed is not None:
+            rows.append(parsed)
+    return rows
+
+
+def parse_promotion_rows(text: str) -> list[dict]:
+    """Δομημένη εξαγωγή των σειρών του πίνακα ΚΡΙΣΕΙΣ ΠΡΟΑΓΩΓΩΝ, χωρίς καμία
+    μορφοποίηση - single source of truth για το ίδιο parsing που χρησιμοποιεί
+    και η annotate_promotion_table.
+
+    Επιστρέφει λίστα από dicts με κλειδιά rank/decision_date/decision/
+    promotion_date, ΤΙΜΕΣ ΠΑΝΤΑ str αυτούσιες όπως στο PDF (καμία
+    κανονικοποίηση μορφής ημερομηνίας, καμία μετατροπή σε datetime.date). Δεν
+    περιλαμβάνει row_index - το βάζει ο caller. Ίδια validation με την
+    annotate_promotion_table: header δεν βρέθηκε -> [], ομάδα με λιγότερες
+    από 4 γραμμές -> αγνοείται, ομάδα ήδη επισημασμένη (idempotency prefix)
+    -> αγνοείται, ώστε να μην παράγει διπλά αν κληθεί πάνω σε ήδη
+    επισημασμένο κείμενο.
+
+    Σε οποιοδήποτε σφάλμα επιστρέφεται κενή λίστα - καταγράφεται πάντα, καμία
+    σιωπηλή αποτυχία σε σύστημα με audit trail."""
+    try:
+        return _parse_rows(text)
+    except Exception:
+        logger.warning(
+            "parse_promotion_rows: αποτυχία επεξεργασίας, επιστροφή κενής λίστας",
+            exc_info=True,
+        )
+        return []
