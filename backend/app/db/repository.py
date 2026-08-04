@@ -1,4 +1,4 @@
-"""Idempotent persistence βοηθητικά για persons/evaluations/field_scores/documents.
+"""Idempotent persistence βοηθητικά για persons/evaluations/field_scores/documents/promotions.
 Re-run ingestion του ίδιου doc_id/person/period ενημερώνει, δεν διπλασιάζει."""
 
 import json
@@ -87,6 +87,27 @@ def replace_field_scores(
     conn.executemany(
         "INSERT INTO field_scores (eval_id, field_code, description, value) VALUES (?, ?, ?, ?)",
         [(eval_id, fs.field_code, fs.description, str(fs.value)) for fs in field_scores],
+    )
+
+
+def replace_promotions(conn: sqlite3.Connection, person_id: str, rows: list[dict]) -> None:
+    conn.execute("DELETE FROM promotions WHERE person_id = ?", (person_id,))
+    conn.executemany(
+        """
+        INSERT INTO promotions (person_id, row_index, rank, decision_date, decision, promotion_date)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (
+                person_id,
+                i,
+                row["rank"],
+                row["decision_date"],
+                row["decision"],
+                row["promotion_date"],
+            )
+            for i, row in enumerate(rows)
+        ],
     )
 
 

@@ -58,6 +58,24 @@ CREATE TABLE IF NOT EXISTS documents (
     PRIMARY KEY (doc_id, period)
 );
 
+-- Μία γραμμή ανά σειρά του πίνακα ΚΡΙΣΕΙΣ ΠΡΟΑΓΩΓΩΝ (Ενότητας 1). row_index
+-- διατηρεί την αρχική διάταξη του πίνακα όπως εμφανίζεται στο PDF.
+-- ΠΡΟΣΟΧΗ: το decision_date αφορά την απόφαση για τον ΕΠΟΜΕΝΟ βαθμό, όχι για
+-- τον βαθμό της ίδιας γραμμής. Άρα promotion_date < decision_date είναι η
+-- ΑΝΑΜΕΝΟΜΕΝΗ σχέση και ΔΕΝ αποτελεί σφάλμα δεδομένων. Οι ημερομηνίες
+-- αποθηκεύονται TEXT αυτούσιες όπως στο PDF, χωρίς κανονικοποίηση μορφής.
+-- ΟΧΙ UNIQUE constraint: άγνωστο αν ο ίδιος βαθμός μπορεί να εμφανιστεί δύο
+-- φορές.
+CREATE TABLE IF NOT EXISTS promotions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    person_id       TEXT NOT NULL REFERENCES persons(person_id),
+    row_index       INTEGER NOT NULL,
+    rank            TEXT NOT NULL,
+    decision_date   TEXT,
+    decision        TEXT,
+    promotion_date  TEXT
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     ts                  TEXT NOT NULL DEFAULT (datetime('now')),
@@ -90,3 +108,4 @@ END;
 CREATE INDEX IF NOT EXISTS idx_evaluations_person_period ON evaluations(person_id, period);
 CREATE INDEX IF NOT EXISTS idx_field_scores_eval_id ON field_scores(eval_id);
 CREATE INDEX IF NOT EXISTS idx_documents_person_period ON documents(person_id, period);
+CREATE INDEX IF NOT EXISTS idx_promotions_person_row ON promotions(person_id, row_index);
