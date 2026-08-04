@@ -76,6 +76,28 @@ CREATE TABLE IF NOT EXISTS promotions (
     promotion_date  TEXT
 );
 
+-- Μία γραμμή ανά εγγραφή διάρκειας της Ενότητας 2 (ΣΥΝΟΛΙΚΟΣ ΧΡΟΝΟΣ
+-- ΥΠΗΡΕΣΙΑΣ): υποενότητα α (ΠΡΑΓΜΑΤΙΚΗ ΥΠΗΡΕΣΙΑ) ή β (ανά σταδιοδρομική
+-- κατηγορία). row_index διατηρεί την αρχική διάταξη όπως εμφανίζεται στο
+-- PDF. Τιμές years/months/days αυτούσιες από το PDF, ΧΩΡΙΣ κανονικοποίηση -
+-- οι μήνες μπορεί να είναι πάνω από 12 (π.χ. 12 Μήνες), δεν είναι σφάλμα.
+-- Η υποενότητα γ (Ανά Κατηγορία Καθήκοντος) δεν καλύπτεται εδώ - ξεχωριστό
+-- PR. Ο πίνακας γεμίζει από το positional parsing του πραγματικού PDF
+-- (app.ingestion.service_time), ανεξάρτητα από το Pydantic
+-- SummaryNote.service_time που τρέφεται από διαφορετικό parser
+-- (pipe-delimited, βλ. docstring του module) - βλ. εκεί για το γιατί
+-- συνυπάρχουν.
+CREATE TABLE IF NOT EXISTS service_time (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    person_id   TEXT NOT NULL REFERENCES persons(person_id),
+    row_index   INTEGER NOT NULL,
+    subsection  TEXT NOT NULL CHECK (subsection IN ('α', 'β')),
+    label       TEXT NOT NULL,
+    years       INTEGER NOT NULL,
+    months      INTEGER NOT NULL,
+    days        INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     ts                  TEXT NOT NULL DEFAULT (datetime('now')),
@@ -109,3 +131,4 @@ CREATE INDEX IF NOT EXISTS idx_evaluations_person_period ON evaluations(person_i
 CREATE INDEX IF NOT EXISTS idx_field_scores_eval_id ON field_scores(eval_id);
 CREATE INDEX IF NOT EXISTS idx_documents_person_period ON documents(person_id, period);
 CREATE INDEX IF NOT EXISTS idx_promotions_person_row ON promotions(person_id, row_index);
+CREATE INDEX IF NOT EXISTS idx_service_time_person_row ON service_time(person_id, row_index);

@@ -27,6 +27,7 @@ from app.ingestion.form_markers import annotate_empty_section5_subfields
 from app.ingestion.homoglyphs import normalize_greek_homoglyphs
 from app.ingestion.parser import parse_pdf
 from app.ingestion.promotion_table import annotate_promotion_table, parse_promotion_rows
+from app.ingestion.service_time import parse_service_time_rows
 from app.ingestion.vectorstore import CHROMA_DIR, add_chunks, delete_by_doc_id, get_collection
 from app.models.evaluation import CAREER_PERIOD, KNOWN_SECTIONS, SummaryNote
 
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 _EVALUATION_SECTION = KNOWN_SECTIONS[-1]  # "ΣΥΝΟΛΙΚΗ ΕΜΦΑΝΙΣΗ - ΧΑΡΑΚΤΗΡΙΣΜΟΣ"
 _SUPPORTING_FACTORS_SECTION = KNOWN_SECTIONS[4]  # "ΣΤΟΙΧΕΙΑ ΣΥΝΗΓΟΡΟΥΝΤΑ Ή ΜΗ"
 _PROMOTIONS_SECTION = KNOWN_SECTIONS[0]  # "ΚΡΙΣΕΙΣ ΠΡΟΑΓΩΓΩΝ"
+_SERVICE_TIME_SECTION = KNOWN_SECTIONS[1]  # "ΣΥΝΟΛΙΚΟΣ ΧΡΟΝΟΣ ΥΠΗΡΕΣΙΑΣ"
 
 
 @dataclass
@@ -121,6 +123,7 @@ def run_ingestion(
             )
 
         promotion_rows: list[dict] = []
+        service_time_rows: list[dict] = []
         career_chunks = [c for c in section_chunks if c.section != _EVALUATION_SECTION]
         if career_chunks:
             repository.upsert_document(
@@ -143,6 +146,11 @@ def run_ingestion(
                     # π.χ. "ΥΠΟΠΛΟΙΑΡΧΟΣ" θα έσπαγε κάθε SQL query πάνω σε rank.
                     promotion_rows.extend(parse_promotion_rows(indexed_text))
                     indexed_text = annotate_promotion_table(indexed_text)
+                if chunk.section == _SERVICE_TIME_SECTION:
+                    # Η ενότητα έχει ΔΥΟ chunks (σελ.1: α/β, σελ.2: γ). Το
+                    # parsing πάνω στο chunk της σελ.2 δεν βρίσκει header α
+                    # και επιστρέφει [] - η συσσώρευση δεν σπάει.
+                    service_time_rows.extend(parse_service_time_rows(indexed_text))
                 add_chunk(
                     indexed_text, CAREER_PERIOD, chunk.section or "Άγνωστη Ενότητα", chunk.page
                 )
@@ -151,6 +159,9 @@ def run_ingestion(
         # chunks ΚΡΙΣΕΩΝ (multi-page), ένα replace_promotions ανά chunk θα
         # έσβηνε (DELETE) το insert του προηγούμενου chunk.
         repository.replace_promotions(conn, person_id, promotion_rows)
+        # Ίδιο σκεπτικό: η ενότητα ΣΥΝΟΛΙΚΟΣ ΧΡΟΝΟΣ ΥΠΗΡΕΣΙΑΣ έχει δύο chunks
+        # (σελ.1 και σελ.2), ΜΙΑ κλήση μετά τον βρόχο.
+        repository.replace_service_time(conn, person_id, service_time_rows)
 
         conn.commit()
     finally:
