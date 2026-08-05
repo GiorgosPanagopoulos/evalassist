@@ -86,6 +86,8 @@ class PromotionEntry(BaseModel):
 
 class ServiceTimeEntry(BaseModel):
     category: str = Field(description="Κατηγορία χρόνου υπηρεσίας")
+    rank: Optional[str] = Field(default=None, description="Βαθμός (μόνο υποενότητα γ, μπορεί να λείπει νόμιμα)")
+    unit: Optional[str] = Field(default=None, description="Μονάδα (μόνο υποενότητα γ)")
     years: int = Field(default=0, ge=0)
     months: int = Field(default=0, ge=0)
     days: int = Field(default=0, ge=0)

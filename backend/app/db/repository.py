@@ -115,8 +115,9 @@ def replace_service_time(conn: sqlite3.Connection, person_id: str, rows: list[di
     conn.execute("DELETE FROM service_time WHERE person_id = ?", (person_id,))
     conn.executemany(
         """
-        INSERT INTO service_time (person_id, row_index, subsection, label, years, months, days)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO service_time
+            (person_id, row_index, subsection, label, rank, unit, years, months, days)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             (
@@ -124,6 +125,8 @@ def replace_service_time(conn: sqlite3.Connection, person_id: str, rows: list[di
                 i,
                 row["subsection"],
                 row["label"],
+                row.get("rank"),
+                row.get("unit"),
                 row["years"],
                 row["months"],
                 row["days"],
