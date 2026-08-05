@@ -30,6 +30,10 @@ from app.ingestion.homoglyphs import normalize_greek_homoglyphs
 from app.ingestion.parser import parse_pdf
 from app.ingestion.promotion_table import annotate_promotion_table, parse_promotion_rows
 from app.ingestion.service_time import parse_service_time_rows
+from app.ingestion.subsection_marker import (
+    annotate_subsection_continuation,
+    resolve_subsection_carryforward,
+)
 from app.ingestion.vectorstore import CHROMA_DIR, add_chunks, delete_by_doc_id, get_collection
 from app.models.evaluation import CAREER_PERIOD, KNOWN_SECTIONS, SummaryNote
 
@@ -83,9 +87,29 @@ def run_ingestion(
     chunk_texts: list[str] = []
     chunk_metas: list[dict] = []
 
-    def add_chunk(text: str, period: str, section: str | None, page: int, score: int = -1) -> None:
+    def add_chunk(
+        text: str,
+        period: str,
+        section: str | None,
+        page: int,
+        score: int = -1,
+        subsection_title: str | None = None,
+    ) -> None:
         for piece in split_text_if_long(text):
-            chunk_texts.append(add_section_context_header(piece, section))
+            # Ίδιο pattern με add_section_context_header: εφαρμόζεται ΑΝΑ
+            # piece (μετά το split_text_if_long), όχι μία φορά στο αρχικό
+            # text, ώστε ΚΑΘΕ piece μιας σπασμένης υποενότητας να κρατά το
+            # context - αλλιώς μόνο το πρώτο piece θα έβλεπε τον marker και
+            # τα υπόλοιπα θα έφταναν ξανά ανώνυμα στον retriever. Σειρά
+            # prepend: πρώτα annotate_subsection_continuation πάνω στο
+            # ακατέργαστο piece, ΜΕΤΑ add_section_context_header πάνω στο
+            # αποτέλεσμα - κάθε prepend μπαίνει ΜΠΡΟΣΤΑ από το προηγούμενο,
+            # άρα αυτή η σειρά κλήσεων παράγει το αντίστροφο διάβασμα: πρώτα
+            # ΕΝΟΤΗΤΑ (γενικό context), μετά ΣΥΝΕΧΕΙΑ ΥΠΟΕΝΟΤΗΤΑΣ (ειδικό
+            # context), μετά το ίδιο το κείμενο.
+            annotated = annotate_subsection_continuation(piece, subsection_title)
+            annotated = add_section_context_header(annotated, section)
+            chunk_texts.append(annotated)
             chunk_metas.append(
                 {
                     "person_id": person_id,
@@ -132,7 +156,16 @@ def run_ingestion(
                 conn, doc_id, person_id, CAREER_PERIOD, str(pdf_path), len(pages)
             )
             periods.append(CAREER_PERIOD)
-            for chunk in career_chunks:
+            # PURE pre-pass πάνω στα ΑΚΑΤΕΡΓΑΣΤΑ SectionChunk (πριν το
+            # split_text_if_long): ο carry-forward είναι θέμα θέσης μέσα στο
+            # έγγραφο - ποιος subsection header προηγήθηκε σε ποιο chunk -
+            # όχι θέμα μεταγενέστερου τεμαχισμού σε pieces. Το αποτέλεσμα
+            # εφαρμόζεται ανά piece μέσα στο add_chunk (βλ. εκεί).
+            subsection_titles = resolve_subsection_carryforward(
+                [chunk.text for chunk in career_chunks],
+                [chunk.section for chunk in career_chunks],
+            )
+            for chunk, subsection_title in zip(career_chunks, subsection_titles):
                 # Κανονικοποίηση ομογράφων + μαρκάρισμα κενών υποπεδίων
                 # Ενότητας 5 ΜΟΝΟ στο κείμενο που πάει για indexing
                 # (indexed_text), ΠΟΤΕ στο chunk.text: το extract_summary_note
@@ -153,7 +186,13 @@ def run_ingestion(
                     # parsing πάνω στο chunk της σελ.2 δεν βρίσκει header α
                     # και επιστρέφει [] - η συσσώρευση δεν σπάει.
                     service_time_rows.extend(parse_service_time_rows(indexed_text))
-                add_chunk(indexed_text, CAREER_PERIOD, chunk.section, chunk.page)
+                add_chunk(
+                    indexed_text,
+                    CAREER_PERIOD,
+                    chunk.section,
+                    chunk.page,
+                    subsection_title=subsection_title,
+                )
 
         # Η υποενότητα γ (Ανά Κατηγορία Καθήκοντος) δεν είναι εξαγώγιμη από
         # το chunk.text (βλ. docstring του duty_categories module) - χρειάζεται
