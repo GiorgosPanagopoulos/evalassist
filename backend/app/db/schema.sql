@@ -77,22 +77,27 @@ CREATE TABLE IF NOT EXISTS promotions (
 );
 
 -- Μία γραμμή ανά εγγραφή διάρκειας της Ενότητας 2 (ΣΥΝΟΛΙΚΟΣ ΧΡΟΝΟΣ
--- ΥΠΗΡΕΣΙΑΣ): υποενότητα α (ΠΡΑΓΜΑΤΙΚΗ ΥΠΗΡΕΣΙΑ) ή β (ανά σταδιοδρομική
--- κατηγορία). row_index διατηρεί την αρχική διάταξη όπως εμφανίζεται στο
--- PDF. Τιμές years/months/days αυτούσιες από το PDF, ΧΩΡΙΣ κανονικοποίηση -
+-- ΥΠΗΡΕΣΙΑΣ): υποενότητα α (ΠΡΑΓΜΑΤΙΚΗ ΥΠΗΡΕΣΙΑ), β (ανά σταδιοδρομική
+-- κατηγορία) ή γ (ανά κατηγορία καθήκοντος). row_index διατηρεί ΜΙΑ ενιαία
+-- αρίθμηση σε όλες τις υποενότητες, με τη σειρά που γράφτηκαν στο PDF.
+-- Τιμές years/months/days αυτούσιες από το PDF, ΧΩΡΙΣ κανονικοποίηση -
 -- οι μήνες μπορεί να είναι πάνω από 12 (π.χ. 12 Μήνες), δεν είναι σφάλμα.
--- Η υποενότητα γ (Ανά Κατηγορία Καθήκοντος) δεν καλύπτεται εδώ - ξεχωριστό
--- PR. Ο πίνακας γεμίζει από το positional parsing του πραγματικού PDF
--- (app.ingestion.service_time), ανεξάρτητα από το Pydantic
--- SummaryNote.service_time που τρέφεται από διαφορετικό parser
--- (pipe-delimited, βλ. docstring του module) - βλ. εκεί για το γιατί
--- συνυπάρχουν.
+-- rank/unit είναι ΠΑΝΤΑ NULL για υποενότητες α/β (δεν υπάρχουν εκεί στο
+-- PDF) και ΠΡΟΑΙΡΕΤΙΚΑ NULL ακόμα και στη γ - το rank μπορεί νόμιμα να
+-- λείπει από συγκεκριμένες σειρές της γ στο πραγματικό έγγραφο.
+-- Ο πίνακας γεμίζει από το positional/γεωμετρικό parsing του πραγματικού
+-- PDF (app.ingestion.service_time για α/β, app.ingestion.duty_categories
+-- για γ), ανεξάρτητα από το Pydantic SummaryNote.service_time που
+-- τρέφεται από διαφορετικό parser (pipe-delimited, βλ. docstring του
+-- service_time module) - βλ. εκεί για το γιατί συνυπάρχουν.
 CREATE TABLE IF NOT EXISTS service_time (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     person_id   TEXT NOT NULL REFERENCES persons(person_id),
     row_index   INTEGER NOT NULL,
-    subsection  TEXT NOT NULL CHECK (subsection IN ('α', 'β')),
+    subsection  TEXT NOT NULL CHECK (subsection IN ('α', 'β', 'γ')),
     label       TEXT NOT NULL,
+    rank        TEXT,
+    unit        TEXT,
     years       INTEGER NOT NULL,
     months      INTEGER NOT NULL,
     days        INTEGER NOT NULL

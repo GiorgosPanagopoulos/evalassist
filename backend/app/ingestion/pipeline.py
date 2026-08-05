@@ -21,6 +21,7 @@ from pathlib import Path
 from app.db import repository
 from app.db.database import DB_PATH, get_connection, init_db
 from app.ingestion.chunker import PageText, chunk_by_section, split_text_if_long
+from app.ingestion.duty_categories import extract_duty_categories_from_pdf
 from app.ingestion.embedder import Embedder
 from app.ingestion.extractor import extract_summary_note
 from app.ingestion.form_markers import annotate_empty_section5_subfields
@@ -154,6 +155,24 @@ def run_ingestion(
                 add_chunk(
                     indexed_text, CAREER_PERIOD, chunk.section or "Άγνωστη Ενότητα", chunk.page
                 )
+
+        # Η υποενότητα γ (Ανά Κατηγορία Καθήκοντος) δεν είναι εξαγώγιμη από
+        # το chunk.text (βλ. docstring του duty_categories module) - χρειάζεται
+        # γεωμετρική πρόσβαση στο ίδιο το PDF, εκτός του βρόχου chunks
+        # παραπάνω. Προστίθεται στην ΙΔΙΑ λίστα με τα α/β ώστε το row_index
+        # να συνεχίσει τη μία ενιαία αρίθμηση αντί να ξεκινήσει από το μηδέν.
+        for entry in extract_duty_categories_from_pdf(pdf_path):
+            service_time_rows.append(
+                {
+                    "subsection": "γ",
+                    "label": entry.category,
+                    "rank": entry.rank,
+                    "unit": entry.unit,
+                    "years": entry.years,
+                    "months": entry.months,
+                    "days": entry.days,
+                }
+            )
 
         # Συσσωρευμένο σε λίστα και όχι μέσα στον βρόχο: αν υπάρχουν δύο
         # chunks ΚΡΙΣΕΩΝ (multi-page), ένα replace_promotions ανά chunk θα

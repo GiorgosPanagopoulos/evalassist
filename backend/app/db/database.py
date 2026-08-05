@@ -27,9 +27,34 @@ def _migrate_audit_log(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE audit_log ADD COLUMN answer_text TEXT")
 
 
+def _migrate_service_time_check(conn: sqlite3.Connection) -> None:
+    """DBs δημιουργημένες πριν την υποενότητα γ (Ανά Κατηγορία Καθήκοντος,
+    βλ. app.ingestion.duty_categories) έχουν CHECK (subsection IN ('α','β'))
+    ήδη αποθηκευμένο στο sqlite_master. Το SQLite ΔΕΝ υποστηρίζει ALTER
+    TABLE για CHECK constraints - η μόνη λύση είναι DROP + recreate (το
+    recreate γίνεται αμέσως μετά, από το CREATE TABLE IF NOT EXISTS του
+    schema.sql).
+
+    Το DROP εδώ είναι lossless: το service_time είναι πλήρως παράγωγος
+    πίνακας - γεμίζει εξ ολοκλήρου από delete-then-insert σε κάθε
+    ingestion (repository.replace_service_time), μηδέν ανθρωπογενή
+    δεδομένα, σε αντίθεση με το audit_log που είναι append-only ιστορικό
+    και ΔΕΝ αγγίζεται εδώ. ΑΠΑΙΤΕΙΤΑΙ re-ingestion των PDF μετά από αυτό το
+    migration ώστε να ξαναγεμίσει ο πίνακας."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'service_time'"
+    ).fetchone()
+    if row is None:
+        return
+    existing_sql = row[0]
+    if existing_sql is not None and "γ" not in existing_sql:
+        conn.execute("DROP TABLE service_time")
+
+
 def init_db(db_path: Path = DB_PATH) -> None:
     conn = get_connection(db_path)
     try:
+        _migrate_service_time_check(conn)
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
         _migrate_audit_log(conn)
         conn.commit()
