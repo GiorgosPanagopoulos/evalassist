@@ -27,9 +27,29 @@ from app.api.main import app  # noqa: E402
 from app.core.config import Settings, get_settings  # noqa: E402
 from app.db import repository  # noqa: E402
 from app.db.database import init_db  # noqa: E402
-from app.models.evaluation import EvaluationEntry, EvaluatorInfo, FieldScore  # noqa: E402
+from app.models.evaluation import (  # noqa: E402
+    CAREER_PERIOD,
+    EvaluationEntry,
+    EvaluatorInfo,
+    FieldScore,
+)
 
 PERIOD = "2025-01-01..2025-12-31"
+
+_PROMOTION_ROWS = [
+    {
+        "rank": "ΥΠΟΠΛΟΙΑΡΧΟΣ",
+        "decision_date": "08/04/2019",
+        "decision": "ΠΕ ΠΑΜΨΗΦΕΙ ΓΙΑ ΤΟ ΕΤΟΣ 2019-2020",
+        "promotion_date": "05/07/2013",
+    },
+    {
+        "rank": "ΑΝΘΥΠΟΠΛΟΙΑΡΧΟΣ",
+        "decision_date": "02/04/2013",
+        "decision": "ΠΕ ΠΑΜΨΗΦΕΙ ΓΙΑ ΤΟ ΕΤΟΣ 2013-2014",
+        "promotion_date": "05/07/2008",
+    },
+]
 
 
 def _entry(score: int, characterization: str) -> EvaluationEntry:
@@ -65,6 +85,8 @@ def _make_temp_db() -> Path:
     eval_id = repository.upsert_evaluation(conn, "p1", entry1)
     repository.replace_field_scores(conn, eval_id, entry1.field_scores)
     repository.upsert_document(conn, "doc-p1", "p1", entry1.period, "/docs/doc-p1.pdf", 8)
+    repository.replace_promotions(conn, "p1", _PROMOTION_ROWS)
+    repository.upsert_document(conn, "doc-p1-career", "p1", CAREER_PERIOD, "/docs/doc-p1-career.pdf", 8)
 
     repository.upsert_person(conn, "p2", "Ιωάννου Μαρία")
     entry2 = _entry(score=55, characterization="ΜΕΤΡΙΟΣ")
@@ -174,12 +196,122 @@ def test_invalid_operation_field_combo_is_422():
         os.remove(db_path)
 
 
+def test_get_promotions_table_returns_judged_for_and_career_doc_ids():
+    db_path = _make_temp_db()
+    try:
+        _override_settings(db_path)
+        client = TestClient(app)
+
+        response = client.post(
+            "/query/structured",
+            json={"person_id": "p1", "period": PERIOD, "operation": "get_promotions_table"},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        rows = {r["row_index"]: r for r in body["result"]["data"]["rows"]}
+        assert rows[0]["judged_for"] is None
+        assert rows[1]["judged_for"] == "ΥΠΟΠΛΟΙΑΡΧΟΣ"
+        assert body["result"]["retrieved_doc_ids"] == ["doc-p1-career"]
+        # career-wide: το doc-p1 (scoped στο evaluation period) δεν εμφανίζεται εδώ
+        assert "doc-p1" not in body["result"]["retrieved_doc_ids"]
+    finally:
+        _clear_overrides()
+        os.remove(db_path)
+
+
+def test_get_promotions_table_other_person_data_never_leaks():
+    db_path = _make_temp_db()
+    try:
+        _override_settings(db_path)
+        client = TestClient(app)
+
+        response = client.post(
+            "/query/structured",
+            json={"person_id": "p2", "period": PERIOD, "operation": "get_promotions_table"},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["result"]["data"]["rows"] == []
+        assert body["result"]["retrieved_doc_ids"] == []
+    finally:
+        _clear_overrides()
+        os.remove(db_path)
+
+
+def test_get_promotions_table_writes_audit_row():
+    db_path = _make_temp_db()
+    try:
+        _override_settings(db_path)
+        client = TestClient(app)
+
+        response = client.post(
+            "/query/structured",
+            json={"person_id": "p1", "period": PERIOD, "operation": "get_promotions_table"},
+        )
+        audit_id = response.json()["audit_id"]
+
+        row = _last_audit_row(db_path)
+        assert row["id"] == audit_id
+        assert row["mode"] == "structured"
+        assert json.loads(row["retrieved_doc_ids"]) == ["doc-p1-career"]
+    finally:
+        _clear_overrides()
+        os.remove(db_path)
+
+
+def test_get_service_time_table_empty_result_is_200_not_error():
+    db_path = _make_temp_db()
+    try:
+        _override_settings(db_path)
+        client = TestClient(app)
+
+        response = client.post(
+            "/query/structured",
+            json={"person_id": "p1", "period": PERIOD, "operation": "get_service_time_table"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["result"]["data"]["rows"] == []
+    finally:
+        _clear_overrides()
+        os.remove(db_path)
+
+
+def test_promotions_table_operation_rejects_other_period():
+    db_path = _make_temp_db()
+    try:
+        _override_settings(db_path)
+        client = TestClient(app)
+
+        response = client.post(
+            "/query/structured",
+            json={
+                "person_id": "p1",
+                "period": PERIOD,
+                "operation": "get_promotions_table",
+                "other_period": "2024-01-01..2024-12-31",
+            },
+        )
+
+        assert response.status_code == 422
+    finally:
+        _clear_overrides()
+        os.remove(db_path)
+
+
 def run_all():
     tests = [
         test_get_scores_scoped_to_person_and_period,
         test_other_person_data_never_leaks,
         test_audit_row_written_with_structured_mode,
         test_invalid_operation_field_combo_is_422,
+        test_get_promotions_table_returns_judged_for_and_career_doc_ids,
+        test_get_promotions_table_other_person_data_never_leaks,
+        test_get_promotions_table_writes_audit_row,
+        test_get_service_time_table_empty_result_is_200_not_error,
+        test_promotions_table_operation_rejects_other_period,
     ]
     for test in tests:
         test()

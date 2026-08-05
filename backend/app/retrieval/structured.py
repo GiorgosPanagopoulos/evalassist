@@ -9,6 +9,7 @@ StructuredResult με άδειο `data`, όχι exception.
 import json
 import sqlite3
 
+from app.db.repository import get_promotions, get_service_time
 from app.retrieval.isolation import IsolationScope
 from app.retrieval.models import StructuredResult
 
@@ -112,3 +113,50 @@ def top_bottom_sections(
     return StructuredResult(
         data=data, sources=result.sources, retrieved_doc_ids=result.retrieved_doc_ids
     )
+
+
+def get_promotions_table(conn: sqlite3.Connection, scope: IsolationScope) -> StructuredResult:
+    """Πίνακας ΚΡΙΣΕΙΣ ΠΡΟΑΓΩΓΩΝ, career-wide (μόνο person_id).
+
+    judged_for είναι ο rank της σειράς row_index - 1 (φθίνων πίνακας, δηλαδή
+    ο επόμενος ανώτερος βαθμός στον ίδιο τον πίνακα) - None για row_index 0,
+    ποτέ συμπερασμένο από ιεραρχία βαθμών εκτός πίνακα."""
+    rows = get_promotions(conn, scope.person_id)
+    doc_ids = _doc_ids_in_scope(conn, scope)
+
+    rank_by_row_index = {row["row_index"]: row["rank"] for row in rows}
+    data_rows = [
+        {
+            "row_index": row["row_index"],
+            "rank": row["rank"],
+            "promotion_date": row["promotion_date"],
+            "decision_date": row["decision_date"],
+            "decision": row["decision"],
+            "judged_for": rank_by_row_index.get(row["row_index"] - 1),
+        }
+        for row in rows
+    ]
+    data = {"person_id": scope.person_id, "rows": data_rows}
+    sources = [{"doc_id": doc_id, "section": "ΚΡΙΣΕΙΣ ΠΡΟΑΓΩΓΩΝ"} for doc_id in doc_ids]
+    return StructuredResult(data=data, sources=sources, retrieved_doc_ids=doc_ids)
+
+
+def get_service_time_table(conn: sqlite3.Connection, scope: IsolationScope) -> StructuredResult:
+    """Πίνακας ΣΥΝΟΛΙΚΟΣ ΧΡΟΝΟΣ ΥΠΗΡΕΣΙΑΣ, career-wide (μόνο person_id)."""
+    rows = get_service_time(conn, scope.person_id)
+    doc_ids = _doc_ids_in_scope(conn, scope)
+
+    data_rows = [
+        {
+            "row_index": row["row_index"],
+            "subsection": row["subsection"],
+            "label": row["label"],
+            "years": row["years"],
+            "months": row["months"],
+            "days": row["days"],
+        }
+        for row in rows
+    ]
+    data = {"person_id": scope.person_id, "rows": data_rows}
+    sources = [{"doc_id": doc_id, "section": "ΣΥΝΟΛΙΚΟΣ ΧΡΟΝΟΣ ΥΠΗΡΕΣΙΑΣ"} for doc_id in doc_ids]
+    return StructuredResult(data=data, sources=sources, retrieved_doc_ids=doc_ids)

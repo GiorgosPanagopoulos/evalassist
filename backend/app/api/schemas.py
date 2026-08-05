@@ -14,7 +14,13 @@ from app.retrieval.models import SemanticResult, StructuredResult
 class StructuredQueryRequest(BaseModel):
     person_id: str
     period: str
-    operation: Literal["get_scores", "compare_periods", "top_bottom_sections"]
+    operation: Literal[
+        "get_scores",
+        "compare_periods",
+        "top_bottom_sections",
+        "get_promotions_table",
+        "get_service_time_table",
+    ]
     other_period: Optional[str] = Field(
         default=None, description="Απαιτείται μόνο για operation='compare_periods'"
     )
@@ -32,9 +38,11 @@ class StructuredQueryRequest(BaseModel):
         elif self.operation == "top_bottom_sections":
             if self.other_period is not None:
                 raise ValueError("other_period δεν επιτρέπεται για operation='top_bottom_sections'")
-        else:  # get_scores
+        else:  # get_scores, get_promotions_table, get_service_time_table
             if self.other_period is not None or self.n is not None:
-                raise ValueError("other_period/n δεν επιτρέπονται για operation='get_scores'")
+                raise ValueError(
+                    "other_period/n δεν επιτρέπονται για αυτό το operation"
+                )
         return self
 
 

@@ -133,6 +133,28 @@ def replace_service_time(conn: sqlite3.Connection, person_id: str, rows: list[di
     )
 
 
+def get_promotions(conn: sqlite3.Connection, person_id: str) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT row_index, rank, decision_date, decision, promotion_date
+        FROM promotions WHERE person_id = ? ORDER BY row_index
+        """,
+        (person_id,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_service_time(conn: sqlite3.Connection, person_id: str) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT row_index, subsection, label, years, months, days
+        FROM service_time WHERE person_id = ? ORDER BY row_index
+        """,
+        (person_id,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def upsert_document(
     conn: sqlite3.Connection,
     doc_id: str,
