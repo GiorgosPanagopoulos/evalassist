@@ -26,6 +26,17 @@ _SCORE_KEYWORDS = (
 
 _FUZZY_THRESHOLD = 0.75
 
+# Στελέχη promotions/service_time (μετά το _normalize): ανεξάρτητο σκέλος,
+# δεν απαιτεί score keyword ούτε known section - βλ. route_query().
+_PROMOTION_SERVICE_TIME_KEYWORDS = (
+    "προηχθ",
+    "προαγωγ",
+    "κριθηκε",
+    "κρισ",
+    "χρονο υπηρεσιας",
+    "υπηρεσια θαλασσ",
+)
+
 
 def _normalize(text: str) -> str:
     decomposed = unicodedata.normalize("NFKD", text)
@@ -56,11 +67,18 @@ def _mentions_known_section(normalized_question: str) -> bool:
     return False
 
 
+def _mentions_promotion_or_service_time(normalized_question: str) -> bool:
+    return any(keyword in normalized_question for keyword in _PROMOTION_SERVICE_TIME_KEYWORDS)
+
+
 def route_query(question: str) -> str | None:
     """Επιστρέφει "structured" hint αν το ερώτημα φαίνεται βαθμολογικό ΚΑΙ
-    αναφέρεται σε γνωστή ενότητα, αλλιώς None. Ποτέ δεν πυροδοτεί αλλαγή mode
-    από μόνο του — μόνο hint προς τον χρήστη."""
+    αναφέρεται σε γνωστή ενότητα, ή αν αναφέρεται σε προαγωγές/χρόνο
+    υπηρεσίας (ανεξάρτητο σκέλος, χωρίς απαίτηση score keyword/known section).
+    Αλλιώς None. Ποτέ δεν πυροδοτεί αλλαγή mode από μόνο του, μόνο hint προς
+    τον χρήστη."""
     normalized = _normalize(question)
-    if _has_score_keyword(normalized) and _mentions_known_section(normalized):
+    score_and_section = _has_score_keyword(normalized) and _mentions_known_section(normalized)
+    if score_and_section or _mentions_promotion_or_service_time(normalized):
         return str(RetrievalMode.STRUCTURED)
     return None

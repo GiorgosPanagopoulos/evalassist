@@ -191,6 +191,46 @@ def test_greek_test_data_uses_real_greek_codepoints_not_latin_lookalikes():
     assert ord(beta_rows[1]["label"][0]) == 0x3A0  # ΕΛΛΗΝΙΚΟ κεφαλαίο Π, όχι λατινικό P
 
 
+def test_get_service_time_reader_orders_by_row_index():
+    db_path = _make_temp_db()
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        repository.upsert_person(conn, "p1", "Παπαδόπουλος Γιώργος")
+
+        rows = parse_service_time_rows(FIXTURE)
+        repository.replace_service_time(conn, "p1", rows)
+        conn.commit()
+
+        result = repository.get_service_time(conn, "p1")
+        conn.close()
+
+        assert [r["row_index"] for r in result] == [0, 1, 2, 3]
+        assert [r["label"] for r in result] == [
+            "ΠΡΑΓΜΑΤΙΚΗ ΥΠΗΡΕΣΙΑ",
+            "ΣΥΝΟΛΙΚΗ ΥΠΗΡΕΣΙΑ ΘΑΛΑΣΣΑΣ",
+            "ΠΛΟΙΑ",
+            "Αος ΜΗΧΑΝΙΚΟΣ",
+        ]
+        assert result[0]["years"] == 23
+        assert result[0]["months"] == 0
+        assert result[0]["days"] == 10
+    finally:
+        db_path.unlink(missing_ok=True)
+
+
+def test_get_service_time_reader_empty_for_unknown_person():
+    db_path = _make_temp_db()
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        result = repository.get_service_time(conn, "missing")
+        conn.close()
+        assert result == []
+    finally:
+        db_path.unlink(missing_ok=True)
+
+
 def run_all():
     tests = [
         test_alpha_single_entry,
@@ -202,6 +242,8 @@ def run_all():
         test_replace_service_time_twice_same_row_count,
         test_row_index_continuous_and_ordered,
         test_greek_test_data_uses_real_greek_codepoints_not_latin_lookalikes,
+        test_get_service_time_reader_orders_by_row_index,
+        test_get_service_time_reader_empty_for_unknown_person,
     ]
     for test in tests:
         test()

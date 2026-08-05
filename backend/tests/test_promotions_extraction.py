@@ -164,6 +164,44 @@ def test_greek_test_data_uses_real_greek_codepoints_not_latin_lookalikes():
     assert ord(rows[2]["rank"][0]) == 0x3A3  # ΕΛΛΗΝΙΚΟ κεφαλαίο Σ, όχι λατινικό S/Sigma-lookalike
 
 
+def test_get_promotions_reader_orders_by_row_index():
+    db_path = _make_temp_db()
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        repository.upsert_person(conn, "p1", "Παπαδόπουλος Γιώργος")
+
+        rows = parse_promotion_rows(FIXTURE)
+        repository.replace_promotions(conn, "p1", rows)
+        conn.commit()
+
+        result = repository.get_promotions(conn, "p1")
+        conn.close()
+
+        assert [r["row_index"] for r in result] == [0, 1, 2]
+        assert [r["rank"] for r in result] == [
+            "ΥΠΟΠΛΟΙΑΡΧΟΣ",
+            "ΑΝΘΥΠΟΠΛΟΙΑΡΧΟΣ",
+            "ΣΗΜΑΙΟΦΟΡΟΣ",
+        ]
+        assert result[0]["promotion_date"] == "05/07/2013"
+        assert result[0]["decision_date"] == "08/04/2019"
+    finally:
+        db_path.unlink(missing_ok=True)
+
+
+def test_get_promotions_reader_empty_for_unknown_person():
+    db_path = _make_temp_db()
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        result = repository.get_promotions(conn, "missing")
+        conn.close()
+        assert result == []
+    finally:
+        db_path.unlink(missing_ok=True)
+
+
 def run_all():
     tests = [
         test_parse_valid_table_produces_correct_dicts_in_order,
@@ -173,6 +211,8 @@ def run_all():
         test_replace_promotions_twice_same_row_count,
         test_row_index_continuous_and_ordered,
         test_greek_test_data_uses_real_greek_codepoints_not_latin_lookalikes,
+        test_get_promotions_reader_orders_by_row_index,
+        test_get_promotions_reader_empty_for_unknown_person,
     ]
     for test in tests:
         test()

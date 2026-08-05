@@ -18,10 +18,17 @@ from app.api.schemas import (
     StructuredQueryResponse,
 )
 from app.core.audit import AuditEntry, write_audit
+from app.models.evaluation import CAREER_PERIOD
 from app.retrieval.isolation import IsolationScope
 from app.retrieval.routing import route_query
 from app.retrieval.semantic import SemanticRetriever
-from app.retrieval.structured import compare_periods, get_scores, top_bottom_sections
+from app.retrieval.structured import (
+    compare_periods,
+    get_promotions_table,
+    get_scores,
+    get_service_time_table,
+    top_bottom_sections,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -68,8 +75,16 @@ def query_structured(
             # compare_periods χτίζει το δικό του IsolationScope ανά period
             # εσωτερικά· περνάμε τις τιμές μέσα από το validated scope object.
             result = compare_periods(conn, scope.person_id, scope.period, request.other_period)
-        else:  # top_bottom_sections
+        elif request.operation == "top_bottom_sections":
             result = top_bottom_sections(conn, scope, n=request.n or 3)
+        elif request.operation == "get_promotions_table":
+            # career-wide: το request.period αγνοείται, το scope χτίζεται πάντα
+            # με CAREER_PERIOD (βλ. app.retrieval.isolation, app.models.evaluation).
+            career_scope = IsolationScope(person_id=request.person_id, period=CAREER_PERIOD)
+            result = get_promotions_table(conn, career_scope)
+        else:  # get_service_time_table
+            career_scope = IsolationScope(person_id=request.person_id, period=CAREER_PERIOD)
+            result = get_service_time_table(conn, career_scope)
         doc_ids = result.retrieved_doc_ids
     except Exception as exc:
         if not doc_ids:
