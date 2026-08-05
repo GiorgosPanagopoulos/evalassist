@@ -21,6 +21,7 @@ from pathlib import Path
 from app.db import repository
 from app.db.database import DB_PATH, get_connection, init_db
 from app.ingestion.chunker import PageText, chunk_by_section, split_text_if_long
+from app.ingestion.context_header import add_section_context_header
 from app.ingestion.duty_categories import extract_duty_categories_from_pdf
 from app.ingestion.embedder import Embedder
 from app.ingestion.extractor import extract_summary_note
@@ -82,15 +83,15 @@ def run_ingestion(
     chunk_texts: list[str] = []
     chunk_metas: list[dict] = []
 
-    def add_chunk(text: str, period: str, section: str, page: int, score: int = -1) -> None:
+    def add_chunk(text: str, period: str, section: str | None, page: int, score: int = -1) -> None:
         for piece in split_text_if_long(text):
-            chunk_texts.append(piece)
+            chunk_texts.append(add_section_context_header(piece, section))
             chunk_metas.append(
                 {
                     "person_id": person_id,
                     "person_name": summary_note.person.name,
                     "period": period,
-                    "section": section,
+                    "section": section or "Άγνωστη Ενότητα",
                     "score": score,
                     "doc_id": doc_id,
                     "page": page,
@@ -152,9 +153,7 @@ def run_ingestion(
                     # parsing πάνω στο chunk της σελ.2 δεν βρίσκει header α
                     # και επιστρέφει [] - η συσσώρευση δεν σπάει.
                     service_time_rows.extend(parse_service_time_rows(indexed_text))
-                add_chunk(
-                    indexed_text, CAREER_PERIOD, chunk.section or "Άγνωστη Ενότητα", chunk.page
-                )
+                add_chunk(indexed_text, CAREER_PERIOD, chunk.section, chunk.page)
 
         # Η υποενότητα γ (Ανά Κατηγορία Καθήκοντος) δεν είναι εξαγώγιμη από
         # το chunk.text (βλ. docstring του duty_categories module) - χρειάζεται
