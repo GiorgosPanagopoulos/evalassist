@@ -13,7 +13,7 @@ import sys
 
 
 def is_mixed_script(token: str) -> bool:
-    has_latin = any(0x41 <= ord(c) <= 0x7A for c in token)
+    has_latin = any(0x41 <= ord(c) <= 0x7A and c.isalpha() for c in token)
     has_greek = any(0x370 <= ord(c) <= 0x3FF for c in token)
     letters = [c for c in token if c.isalpha()]
     if not (has_latin and has_greek and letters):
@@ -36,10 +36,17 @@ def main(path: str) -> int:
                 bad += 1
                 continue
 
-            for token in re.findall(r"\S+", line):
-                if is_mixed_script(token):
-                    print(f"LINE {i} MIXED SCRIPT: {token!r}")
-                    bad += 1
+            # Only text that gets compared against document content is checked
+            # for homoglyphs. forbidden_patterns are regexes: their \d and \s
+            # escapes are Latin by design and are validated by re.compile below.
+            checked = [obj.get("question", "")]
+            for key in ("must_include", "must_not_include"):
+                checked.extend(obj.get("expected", {}).get(key, []))
+            for value in checked:
+                for token in re.findall(r"\S+", value):
+                    if is_mixed_script(token):
+                        print(f"LINE {i} MIXED SCRIPT: {token!r}")
+                        bad += 1
 
             qid = obj.get("id")
             if qid in seen_ids:
