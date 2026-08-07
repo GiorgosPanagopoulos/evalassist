@@ -17,7 +17,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import app.ingestion.duty_categories as duty_categories  # noqa: E402
-from app.ingestion.duty_categories import extract_duty_category_rows  # noqa: E402
+from app.ingestion.duty_categories import (  # noqa: E402
+    _DUTY_LABEL_PREFIX,
+    extract_duty_category_rows,
+    label_duty_category_rows,
+)
 
 # Αυτούσια word tuples (x0, y0, x1, y1, text) - σελίδα 2, οι 5 πραγματικές
 # σειρές της υποενότητας γ. Σειρά εμφάνισης στο PDF, ΟΧΙ ταξινομημένα.
@@ -154,6 +158,121 @@ def test_failsafe_exception_returns_empty_list_not_raise():
     assert result == []
 
 
+# Αυτούσιο repr από private/debug_duty_categories_page2_chunktext.txt -
+# indexed_text (μετά normalize_greek_homoglyphs) του chunk σελίδας 2, ΠΡΙΝ
+# από labeling. Ίδιο πρόσωπο/PDF με τα WORDS_PAGE_2 παραπάνω, ίδιες 5
+# εγγραφές, στη μορφή που πράγματι παράγει parser._extract_text_blocks (ένα
+# token ανά γραμμή, κενή γραμμή ανάμεσα σε εγγραφές) - όχι ξαναγραμμένο από
+# μνήμη/εικασία.
+#
+# Το "12 Μήνες" στη 2η εγγραφή ΕΙΝΑΙ η πραγματική τιμή του εντύπου, όχι
+# σφάλμα parsing - επαληθεύτηκε γεωμετρικά (token 12@x=388, ακριβώς στη
+# στήλη μηνών). Μην το "διορθώσεις" σε <12.
+PAGE2_TEXT = (
+    "Α ΜΗΧΑΝΙΚΟΣ\nΑΝΘΧΟΣ\nΥΒ ΑΜΦΙΤΡΙΤΗ\n2\nΈτη\n1\nΜήνες\n24\nΗμέρες\n\n"
+    "Α ΜΗΧΑΝΙΚΟΣ\nΥΠΧΟΣ\nΥΒ ΠΑΠΑΝΙΚΟΛΗΣ\n2\nΈτη\n12\nΜήνες\n3\nΗμέρες\n\n"
+    "Α ΜΗΧΑΝΙΚΟΣ\nΥΠΧΟΣ\nΥΒ ΠΑΠΑΝΙΚΟΛΗΣ\n1\nΈτη\n1\nΜήνες\n6\nΗμέρες\n\n"
+    "Α ΜΗΧΑΝΙΚΟΣ\nΥΒ ΠΡΩΤΕΥΣ\n0\nΈτη\n0\nΜήνες\n28\nΗμέρες\n\n"
+    "Α ΜΗΧΑΝΙΚΟΣ\nΥΒ ΠΡΩΤΕΥΣ\n0\nΈτη\n9\nΜήνες\n21\nΗμέρες"
+)
+
+ENTRIES = extract_duty_category_rows(WORDS_PAGE_2)
+
+
+def test_label_happy_path_all_five_rows_labeled():
+    result = label_duty_category_rows(PAGE2_TEXT, ENTRIES)
+    assert result.count(_DUTY_LABEL_PREFIX) == 5
+    assert (
+        "ΚΑΘΗΚΟΝ: Α ΜΗΧΑΝΙΚΟΣ | ΒΑΘΜΟΣ: ΑΝΘΧΟΣ | ΜΟΝΑΔΑ: ΥΒ ΑΜΦΙΤΡΙΤΗ | "
+        "ΔΙΑΡΚΕΙΑ: 2 Έτη 1 Μήνες 24 Ημέρες"
+    ) in result
+    assert (
+        "ΚΑΘΗΚΟΝ: Α ΜΗΧΑΝΙΚΟΣ | ΒΑΘΜΟΣ: ΥΠΧΟΣ | ΜΟΝΑΔΑ: ΥΒ ΠΑΠΑΝΙΚΟΛΗΣ | "
+        "ΔΙΑΡΚΕΙΑ: 2 Έτη 12 Μήνες 3 Ημέρες"
+    ) in result
+
+
+def test_label_missing_rank_uses_no_value_marker():
+    result = label_duty_category_rows(PAGE2_TEXT, ENTRIES)
+    assert (
+        "ΚΑΘΗΚΟΝ: Α ΜΗΧΑΝΙΚΟΣ | ΒΑΘΜΟΣ: ΟΥΔΕΝ ΚΑΤΑΧΩΡΗΜΕΝΟ | ΜΟΝΑΔΑ: ΥΒ ΠΡΩΤΕΥΣ | "
+        "ΔΙΑΡΚΕΙΑ: 0 Έτη 0 Μήνες 28 Ημέρες"
+    ) in result
+    assert (
+        "ΚΑΘΗΚΟΝ: Α ΜΗΧΑΝΙΚΟΣ | ΒΑΘΜΟΣ: ΟΥΔΕΝ ΚΑΤΑΧΩΡΗΜΕΝΟ | ΜΟΝΑΔΑ: ΥΒ ΠΡΩΤΕΥΣ | "
+        "ΔΙΑΡΚΕΙΑ: 0 Έτη 9 Μήνες 21 Ημέρες"
+    ) in result
+
+
+def test_label_replaces_bare_lines_not_appends():
+    # ΑΝΤΙΚΑΤΑΣΤΑΣΗ όχι ΠΡΟΣΘΗΚΗ: η μονάδα δεν πρέπει να εμφανίζεται δύο
+    # φορές (μία γυμνή + μία μέσα στη labeled γραμμή).
+    result = label_duty_category_rows(PAGE2_TEXT, ENTRIES)
+    assert result.count("ΥΒ ΑΜΦΙΤΡΙΤΗ") == 1
+    assert result.count("ΥΒ ΠΑΠΑΝΙΚΟΛΗΣ") == 2  # δύο ΔΙΑΦΟΡΕΤΙΚΕΣ εγγραφές, όχι διπλασιασμός της ίδιας
+
+
+def test_label_all_or_nothing_one_bad_entry_blocks_all():
+    # entries[0] αντικαθίσταται με μια εκδοχή που ΔΕΝ ταιριάζει στο κείμενο
+    # (days=999 δεν υπάρχει) - ΚΑΜΙΑ από τις 5 πρέπει να αλλάξει, ούτε οι
+    # 4 έγκυρες.
+    bad_entry = ENTRIES[0].model_copy(update={"days": 999})
+    corrupted = [bad_entry] + ENTRIES[1:]
+    result = label_duty_category_rows(PAGE2_TEXT, corrupted)
+    assert result == PAGE2_TEXT
+    assert _DUTY_LABEL_PREFIX not in result
+
+
+def test_label_idempotency_second_pass_does_not_change_result():
+    once = label_duty_category_rows(PAGE2_TEXT, ENTRIES)
+    twice = label_duty_category_rows(once, ENTRIES)
+    assert once == twice
+
+
+def test_label_guard_and_format_share_single_prefix_constant():
+    once = label_duty_category_rows(PAGE2_TEXT, ENTRIES)
+    first_line = once.split("\n", 1)[0]
+    assert first_line.startswith(_DUTY_LABEL_PREFIX)
+    # το guard ελέγχει ΤΗΝ ΙΔΙΑ σταθερά που παράγει η μορφοποίηση - κείμενο
+    # χτισμένο με το import, όχι με ξαναγραμμένο literal στο test.
+    already_labeled = f"{_DUTY_LABEL_PREFIX} sentinel\n" + PAGE2_TEXT
+    assert label_duty_category_rows(already_labeled, ENTRIES) == already_labeled
+
+
+def test_label_months_output_uses_greek_mu_not_latin():
+    once = label_duty_category_rows(PAGE2_TEXT, ENTRIES)
+    assert "Μήνες" in once
+    idx = once.index("Μήνες")
+    assert ord(once[idx]) == 0x39C  # ΕΛΛΗΝΙΚΟ κεφαλαίο Μ, όχι λατινικό M (0x4D)
+    assert "Mήνες" not in once  # λατινικό M δεν πρέπει να διαφύγει στην έξοδο
+
+
+def test_label_empty_entries_returns_text_unchanged():
+    assert label_duty_category_rows(PAGE2_TEXT, []) == PAGE2_TEXT
+
+
+def test_label_no_matching_entries_returns_text_unchanged():
+    # entries ΜΗ κενό αλλά ΚΑΜΙΑ εγγραφή δεν εμφανίζεται στο text - όπως το
+    # chunk σελ.1 α/β, όπου η υποενότητα γ δεν υπάρχει καν στο κείμενο.
+    # failed == len(spans): no-op (logger.debug), όχι warning.
+    page1_text = "Α ΝΑΥΤΙΚΟΣ\nΑΤΤΑΣΕ\n1\nΈτη\n2\nΜήνες\n3\nΗμέρες"
+    assert label_duty_category_rows(page1_text, ENTRIES) == page1_text
+
+
+def test_label_failsafe_exception_returns_text_unchanged():
+    original = duty_categories._entry_raw_span
+
+    def _boom(_entry):
+        raise RuntimeError("forced failure for test")
+
+    duty_categories._entry_raw_span = _boom
+    try:
+        result = label_duty_category_rows(PAGE2_TEXT, ENTRIES)
+    finally:
+        duty_categories._entry_raw_span = original
+    assert result == PAGE2_TEXT
+
+
 def run_all():
     tests = [
         test_five_real_rows_exact,
@@ -163,6 +282,16 @@ def run_all():
         test_empty_words_returns_empty_list,
         test_row_without_values_is_dropped,
         test_failsafe_exception_returns_empty_list_not_raise,
+        test_label_happy_path_all_five_rows_labeled,
+        test_label_missing_rank_uses_no_value_marker,
+        test_label_replaces_bare_lines_not_appends,
+        test_label_all_or_nothing_one_bad_entry_blocks_all,
+        test_label_idempotency_second_pass_does_not_change_result,
+        test_label_guard_and_format_share_single_prefix_constant,
+        test_label_months_output_uses_greek_mu_not_latin,
+        test_label_empty_entries_returns_text_unchanged,
+        test_label_no_matching_entries_returns_text_unchanged,
+        test_label_failsafe_exception_returns_text_unchanged,
     ]
     for test in tests:
         test()
