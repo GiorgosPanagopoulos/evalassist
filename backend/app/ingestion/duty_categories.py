@@ -202,3 +202,100 @@ def extract_duty_categories_from_pdf(pdf_path: Path) -> list[ServiceTimeEntry]:
         )
         return []
     return extract_duty_category_rows(word_tuples)
+
+
+# Ίδια σταθερά και για τον idempotency guard ΚΑΙ για τη μορφοποίηση - βλ.
+# _entry_labeled_line/_label. Δύο ανεξάρτητα literals θα μπορούσαν να
+# αποκλίνουν σιωπηλά σε μελλοντική επεξεργασία.
+_DUTY_LABEL_PREFIX = "ΚΑΘΗΚΟΝ:"
+
+# Ίδια σύμβαση με app.ingestion.form_markers._MARKER (κενό/απόν πεδίο) - όχι
+# import, ίδιο private literal σε διαφορετικό module.
+_NO_VALUE = "ΟΥΔΕΝ ΚΑΤΑΧΩΡΗΜΕΝΟ"
+
+
+def _entry_raw_span(entry: ServiceTimeEntry) -> str:
+    """Το ακριβές substring που αναμένεται στο flattened indexed_text για
+    αυτή την εγγραφή: category, [rank], [unit], years, 'Έτη', months,
+    'Μήνες', days, 'Ημέρες', ένα token ανά γραμμή (\\n) - επαληθευμένο με
+    πραγματικό dump του chunk σελίδας 2 πριν γραφτεί αυτή η συνάρτηση.
+    rank/unit απόντα (κενό x-bucket) δεν παράγουν δική τους γραμμή, ίδια
+    αρχή με το ίδιο το _row_to_entry."""
+    lines = [entry.category]
+    if entry.rank is not None:
+        lines.append(entry.rank)
+    if entry.unit is not None:
+        lines.append(entry.unit)
+    lines += [str(entry.years), "Έτη", str(entry.months), "Μήνες", str(entry.days), "Ημέρες"]
+    return "\n".join(lines)
+
+
+def _entry_labeled_line(entry: ServiceTimeEntry) -> str:
+    rank = entry.rank if entry.rank is not None else _NO_VALUE
+    unit = entry.unit if entry.unit is not None else _NO_VALUE
+    return (
+        f"{_DUTY_LABEL_PREFIX} {entry.category} | ΒΑΘΜΟΣ: {rank} | ΜΟΝΑΔΑ: {unit} | "
+        f"ΔΙΑΡΚΕΙΑ: {entry.years} Έτη {entry.months} Μήνες {entry.days} Ημέρες"
+    )
+
+
+def label_duty_category_rows(text: str, entries: list[ServiceTimeEntry]) -> str:
+    """Αντικαθιστά τις γυμνές γραμμές κάθε εγγραφής της υποενότητας γ με ΜΙΑ
+    ρητά labeled γραμμή (ΚΑΘΗΚΟΝ: .. | ΒΑΘΜΟΣ: .. | ΜΟΝΑΔΑ: .. |
+    ΔΙΑΡΚΕΙΑ: ..), ώστε ο πίνακας να μη διαβάζεται κατά στήλες όταν λείπει
+    ο βαθμός (βλ. duty_category_labels.md - ΥΒ ΠΡΩΤΕΥΣ διαβάστηκε ως βαθμός).
+
+    entries είναι τα ΗΔΗ σωστά x-bucketed ServiceTimeEntry από
+    extract_duty_category_rows/extract_duty_categories_from_pdf. Καμία νέα
+    γεωμετρία εδώ, καθαρή αντικατάσταση κειμένου με βάση τα ήδη σωστά πεδία.
+
+    ALL-OR-NOTHING: για κάθε entry χτίζεται το αναμενόμενο raw span (βλ.
+    _entry_raw_span) και μετράται πόσες φορές εμφανίζεται στο text. Αν έστω
+    ένα entry δεν εμφανίζεται ακριβώς μία φορά (λείπει, ή διφορούμενο >1
+    φορά), ΚΑΜΙΑ αντικατάσταση δεν εφαρμόζεται - επιστρέφεται το text
+    αυτούσιο. Ένας μερικώς μετασχηματισμένος πίνακας θα έκρυβε το πρόβλημα
+    αντί να το λύσει ρητά. entries=[] (π.χ. chunk σελ.1 α/β, ή αποτυχία
+    εξαγωγής): κανένα span προς αναζήτηση, το text επιστρέφεται αυτούσιο.
+
+    Idempotency: αν το text περιέχει ήδη _DUTY_LABEL_PREFIX, επιστρέφεται
+    αμετάβλητο - δεν διπλασιάζεται.
+
+    Σε οποιοδήποτε σφάλμα επιστρέφεται το text αυτούσιο - καταγράφεται
+    πάντα, καμία σιωπηλή αποτυχία σε σύστημα με audit trail."""
+    try:
+        return _label(text, entries)
+    except Exception:
+        logger.warning(
+            "label_duty_category_rows: αποτυχία επεξεργασίας, επιστροφή text αυτούσιο",
+            exc_info=True,
+        )
+        return text
+
+
+def _label(text: str, entries: list[ServiceTimeEntry]) -> str:
+    if _DUTY_LABEL_PREFIX in text:
+        return text
+
+    spans = [(_entry_raw_span(e), _entry_labeled_line(e)) for e in entries]
+    failed = sum(1 for span, _ in spans if text.count(span) != 1)
+    if failed == len(spans):
+        # Καμία εγγραφή δεν ταίριαξε - αναμενόμενο no-op (π.χ. chunk σελ.1
+        # α/β, όπου η υποενότητα γ δεν υπάρχει καν στο κείμενο), όχι σπάσιμο.
+        logger.debug(
+            "label_duty_category_rows: 0/%d εγγραφες ταιριαξαν, no-op (chunk χωρις υποενοτητα γ)",
+            len(spans),
+        )
+        return text
+    if failed:
+        logger.warning(
+            "label_duty_category_rows: %d/%d εγγραφες δεν ταιριαξαν ακριβως μια φορα στο "
+            "text, καμια αντικατασταση",
+            failed,
+            len(spans),
+        )
+        return text
+
+    result = text
+    for span, labeled_line in spans:
+        result = result.replace(span, labeled_line, 1)
+    return result

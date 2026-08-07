@@ -22,7 +22,7 @@ from app.db import repository
 from app.db.database import DB_PATH, get_connection, init_db
 from app.ingestion.chunker import PageText, chunk_by_section, split_text_if_long
 from app.ingestion.context_header import add_section_context_header
-from app.ingestion.duty_categories import extract_duty_categories_from_pdf
+from app.ingestion.duty_categories import extract_duty_categories_from_pdf, label_duty_category_rows
 from app.ingestion.embedder import Embedder
 from app.ingestion.extractor import extract_summary_note
 from app.ingestion.form_markers import annotate_empty_section5_subfields
@@ -151,6 +151,11 @@ def run_ingestion(
         promotion_rows: list[dict] = []
         service_time_rows: list[dict] = []
         career_chunks = [c for c in section_chunks if c.section != _EVALUATION_SECTION]
+        # Ένα read, μία πηγή: το ίδιο αποτέλεσμα τροφοδοτεί ΚΑΙ τα
+        # service_time_rows (βρόχος γ παρακάτω, θέση αμετάβλητη ώστε το
+        # row_index να μη μετακινηθεί) ΚΑΙ το labeling μέσα στον βρόχο chunks
+        # - όχι δεύτερο άνοιγμα του PDF.
+        duty_category_entries = extract_duty_categories_from_pdf(pdf_path)
         if career_chunks:
             repository.upsert_document(
                 conn, doc_id, person_id, CAREER_PERIOD, str(pdf_path), len(pages)
@@ -184,8 +189,15 @@ def run_ingestion(
                 if chunk.section == _SERVICE_TIME_SECTION:
                     # Η ενότητα έχει ΔΥΟ chunks (σελ.1: α/β, σελ.2: γ). Το
                     # parsing πάνω στο chunk της σελ.2 δεν βρίσκει header α
-                    # και επιστρέφει [] - η συσσώρευση δεν σπάει.
+                    # και επιστρέφει [] - η συσσώρευση δεν σπάει. Πρέπει να
+                    # δει το κείμενο ΠΡΙΝ το labeling, ίδιο σκεπτικό με
+                    # promotion_rows παραπάνω.
                     service_time_rows.extend(parse_service_time_rows(indexed_text))
+                    # duty_category_entries περιέχει πάντα τις εγγραφές της
+                    # σελ.2 (γ) - στο chunk σελ.1 (α/β) το ALL-OR-NOTHING
+                    # guard δεν βρίσκει κανένα raw span και επιστρέφει το
+                    # κείμενο αυτούσιο, καμία ειδική περίπτωση εδώ χρειάζεται.
+                    indexed_text = label_duty_category_rows(indexed_text, duty_category_entries)
                 add_chunk(
                     indexed_text,
                     CAREER_PERIOD,
@@ -195,11 +207,13 @@ def run_ingestion(
                 )
 
         # Η υποενότητα γ (Ανά Κατηγορία Καθήκοντος) δεν είναι εξαγώγιμη από
-        # το chunk.text (βλ. docstring του duty_categories module) - χρειάζεται
-        # γεωμετρική πρόσβαση στο ίδιο το PDF, εκτός του βρόχου chunks
-        # παραπάνω. Προστίθεται στην ΙΔΙΑ λίστα με τα α/β ώστε το row_index
-        # να συνεχίσει τη μία ενιαία αρίθμηση αντί να ξεκινήσει από το μηδέν.
-        for entry in extract_duty_categories_from_pdf(pdf_path):
+        # το chunk.text (βλ. docstring του duty_categories module) - τα
+        # entries διαβάστηκαν ήδη πριν τον βρόχο (duty_category_entries),
+        # όχι δεύτερο άνοιγμα του PDF εδώ. Προστίθενται στην ΙΔΙΑ λίστα με τα
+        # α/β ΣΤΗΝ ΙΔΙΑ ΘΕΣΗ όπως πριν, ώστε το row_index να συνεχίσει τη μία
+        # ενιαία αρίθμηση αντί να ξεκινήσει από το μηδέν - η μεταφορά της
+        # ανάγνωσης πριν τον βρόχο δεν αλλάζει τη σειρά εισαγωγής εδώ.
+        for entry in duty_category_entries:
             service_time_rows.append(
                 {
                     "subsection": "γ",
