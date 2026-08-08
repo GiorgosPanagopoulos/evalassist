@@ -45,3 +45,8 @@ private/
 
 # Local LLM benchmark artifacts (exploration, not for main)
 evals/greek_llm_benchmark/
+
+# Local debug / ablation scratch files (never committed)
+backend/_replay_b09.py
+backend/_ablate_b09.py
+backend/prompt_dump_*.txt
