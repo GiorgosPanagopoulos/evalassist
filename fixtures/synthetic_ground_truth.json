@@ -1,5 +1,5 @@
 {
-  "_comment": "Συνθετικά δεδομένα, ΚΑΝΕΝΑ πραγματικό στοιχείο. Μοναδική πηγή αλήθειας: τη διαβάζουν και scripts/generate_synthetic_pdfs.py (rendering) και scripts/e2e_synthetic_test.py (assertions).",
+  "_comment": "Συνθετικά δεδομένα, ΚΑΝΕΝΑ πραγματικό στοιχείο. Μοναδική πηγή αλήθειας: τη διαβάζουν και scripts/generate_synthetic_pdfs.py (rendering) και scripts/e2e_synthetic_test.py (assertions). Η δομή του section 5 (health_entries: date/opinion_ref/leave_days/leave_days_raw/description) προέρχεται από ΕΝΑ παρατηρημένο αντίτυπο (Μ-01253), όχι από προδιαγραφή φόρμας — δεν υπάρχει δεύτερο πραγματικό δείγμα. Το synthetic μοντελοποιεί παρατήρηση, όχι επαληθευμένο τύπο.",
   "persons": [
     {
       "agm": "Μ-99001",
@@ -45,8 +45,8 @@
         {"seq": 4, "k_or_a": "Α", "unit": "ΚΕΤΘ (ΣΥΝΘΕΤΙΚΟ)", "date_from": "2024-07-01", "date_to": null, "days": null}
       ],
       "health_entries": [
-        {"category": "Κατάσταση Υγείας", "description": "Καλή, χωρίς περιορισμούς (ΣΥΝΘΕΤΙΚΟ)", "date": "2024-06-01"},
-        {"category": "Ευαρέσκεια", "description": "Έγγραφη ευαρέσκεια Διοικητού για άσκηση εντοπισμού υποβρυχίων (ΣΥΝΘΕΤΙΚΟ)", "date": "2023-09-15"}
+        {"date": "2024-06-01", "opinion_ref": "5884", "leave_days": 5, "leave_days_raw": "5", "description": "Καλή, χωρίς περιορισμούς (ΣΥΝΘΕΤΙΚΟ)"},
+        {"date": "2023-09-15", "opinion_ref": "ΝΝΑ/030815ΖΑΠΡ19", "leave_days": 10, "leave_days_raw": "10", "description": "Παρακολούθηση μετά από χειρουργική επέμβαση (ΣΥΝΘΕΤΙΚΟ)"}
       ],
       "evaluations": [
         {
@@ -137,8 +137,7 @@
         {"seq": 3, "k_or_a": "Κ", "unit": "Πυραυλάκατος ΣΥΝΘΕΤΙΚΗ-Π2 (Πυραυλικά Συστήματα)", "date_from": "2023-01-01", "date_to": "2024-06-30", "days": 546}
       ],
       "health_entries": [
-        {"category": "Κατάσταση Υγείας", "description": "Καλή, χωρίς περιορισμούς (ΣΥΝΘΕΤΙΚΟ)", "date": "2024-06-01"},
-        {"category": "Συμβούλιο", "description": "Κρίθηκε προακτέα από το Συμβούλιο Κρίσεων 2021 (ΣΥΝΘΕΤΙΚΟ)", "date": "2021-02-10"}
+        {"date": "2021-02-10", "opinion_ref": "ΑΒΓ/123456ΣΥΝ21", "leave_days": null, "leave_days_raw": "", "description": "Καλή, χωρίς περιορισμούς (ΣΥΝΘΕΤΙΚΟ)"}
       ],
       "evaluations": [
         {
@@ -231,8 +230,7 @@
         {"seq": 4, "k_or_a": "Α", "unit": "ΓΕΝ/ΔΚΒ (ΣΥΝΘΕΤΙΚΟ)", "date_from": "2024-07-01", "date_to": null, "days": null}
       ],
       "health_entries": [
-        {"category": "Κατάσταση Υγείας", "description": "Καλή, χωρίς περιορισμούς (ΣΥΝΘΕΤΙΚΟ)", "date": "2024-06-01"},
-        {"category": "Ευαρέσκεια", "description": "Έγγραφη ευαρέσκεια για την αύξηση απόδοσης της μονάδας αφαλάτωσης (ΣΥΝΘΕΤΙΚΟ)", "date": "2023-11-20"}
+        {"date": "2023-11-20", "opinion_ref": "ΔΕΖ/222222ΣΥΝ23", "leave_days": 3, "leave_days_raw": "3", "description": ""}
       ],
       "evaluations": [
         {

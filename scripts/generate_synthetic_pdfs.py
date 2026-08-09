@@ -42,15 +42,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 GROUND_TRUTH_PATH = REPO_ROOT / "fixtures" / "synthetic_ground_truth.json"
 OUTPUT_DIR = REPO_ROOT / "fixtures" / "synthetic_pdfs"
 
-KNOWN_SECTIONS = [
-    "ΚΡΙΣΕΙΣ ΠΡΟΑΓΩΓΩΝ",
-    "ΣΥΝΟΛΙΚΟΣ ΧΡΟΝΟΣ ΥΠΗΡΕΣΙΑΣ",
-    "ΚΑΤΕΧΟΜΕΝΑ ΠΤΥΧΙΑ",
-    "ΤΟΠΟΘΕΤΗΣΕΙΣ",
-    "ΣΤΟΙΧΕΙΑ ΣΥΝΗΓΟΡΟΥΝΤΑ Ή ΜΗ",
-    "ΓΕΝΙΚΗ ΙΚΑΝΟΤΗΤΑ ΣΤΟΝ ΚΑΤΕΧΟΜΕΝΟ ΒΑΘΜΟ",
-    "ΣΥΝΟΛΙΚΗ ΕΜΦΑΝΙΣΗ - ΧΑΡΑΚΤΗΡΙΣΜΟΣ",
-]
+# Single source of truth: import from production, never copy.
+# A local copy diverged silently (capital vs lowercase eta) and hid section 5.
+sys.path.insert(0, str(REPO_ROOT / "backend"))
+from app.ingestion.extractor import KNOWN_SECTIONS  # noqa: E402
 
 _GREEK_FONT_CANDIDATES = [
     # macOS (Homebrew cask: brew install --cask font-dejavu)
@@ -181,15 +176,18 @@ def _postings_section(person: dict) -> str:
 
 
 def _health_section(person: dict) -> str:
-    rows = [
-        _row(
-            ("Κατηγορία", h["category"]),
-            ("Περιγραφή", h["description"]),
-            ("Ημερομηνία", _fmt_date(h["date"])),
+    entries = [
+        "\n".join(
+            [
+                _scalar("ΗΜΕΡΟΜΗΝΙΑ", _fmt_date(h["date"])),
+                _scalar("ΓΝΩΜΑΤΕΥΣΗ", h["opinion_ref"]),
+                _scalar("ΗΜΕΡΕΣ ΑΔΕΙΑΣ", h["leave_days_raw"]),
+                _scalar("ΠΕΡΙΓΡΑΦΗ", h["description"]),
+            ]
         )
         for h in person["health_entries"]
     ]
-    return _section_header(KNOWN_SECTIONS[4]) + "\n".join(rows)
+    return _section_header(KNOWN_SECTIONS[4]) + "\n".join(entries)
 
 
 def _general_ability_section(person: dict) -> str:
