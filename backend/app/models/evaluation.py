@@ -109,9 +109,11 @@ class PostingEntry(BaseModel):
 
 
 class HealthEntry(BaseModel):
-    category: str = Field(description="π.χ. Κατάσταση Υγείας, Ευαρέσκεια, Συμβούλιο, Ποινή")
-    description: str
     date: Optional[datetime.date] = Field(default=None)
+    opinion_ref: Optional[str] = Field(default=None, description="ΓΝΩΜΑΤΕΥΣΗ — αλφαριθμητικό ή αριθμητικό")
+    leave_days: Optional[int] = Field(default=None, description="ΗΜΕΡΕΣ ΑΔΕΙΑΣ, μόνο αν parse-άρει καθαρά ως int")
+    leave_days_raw: str = Field(default="", description="ΗΜΕΡΕΣ ΑΔΕΙΑΣ όπως εμφανίζεται στο έγγραφο")
+    description: str = Field(default="", description="ΠΕΡΙΓΡΑΦΗ — επιτρέπεται κενή")
 
 
 class FieldScore(BaseModel):

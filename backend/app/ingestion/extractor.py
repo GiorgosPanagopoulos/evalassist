@@ -24,6 +24,7 @@ semantic retrieval να αναζητά στην πραγματική διατύ�
 """
 
 import bisect
+import logging
 import re
 from datetime import date
 
@@ -44,6 +45,8 @@ from app.models.evaluation import (
     ServiceTimeEntry,
     SummaryNote,
 )
+
+logger = logging.getLogger(__name__)
 
 _EVALUATION_SECTION = KNOWN_SECTIONS[-1]
 _PERSON_BLOCK_MARKER = "ΣΤΟΙΧΕΙΑ ΑΤΟΜΟΥ"
@@ -171,6 +174,56 @@ def _iter_pipe_rows(text: str, first_label: str) -> list[dict[str, str]]:
     return rows
 
 
+# Ενότητα 5 / Κατάσταση Υγείας (πραγματικό PDF, βλ. RECON_SECTION5_HEALTH):
+# ΜΟΝΟ αυτά τα 4 labels διαβάζονται. WHITELIST, ΟΧΙ blacklist — ο footer του
+# πραγματικού εγγράφου ("Εκτυπώθηκε από το χρήστη: B3VE\e.siatis") εμφανίζεται
+# ΜΕΣΑ σε εγγραφές (page break ανάμεσα σε ΗΜΕΡΕΣ ΑΔΕΙΑΣ και ΠΕΡΙΓΡΑΦΗ) και
+# ταιριάζει με σχήμα "label: τιμή"· θα γινόταν πεδίο με blacklist φιλτράρισμα.
+_HEALTH_LABELS = ["ΗΜΕΡΟΜΗΝΙΑ", "ΓΝΩΜΑΤΕΥΣΗ", "ΗΜΕΡΕΣ ΑΔΕΙΑΣ", "ΠΕΡΙΓΡΑΦΗ"]
+_HEALTH_SECTION_END_RE = re.compile(r"^ε\.\s*Ευαρέσκειες", re.MULTILINE)
+
+
+def _health_field(block: str, label: str) -> str:
+    """Σαν `_field`, με stop lookahead που ξέρει το ΑΚΡΙΒΕΣ σύνολο των 4
+    whitelisted labels αντί για το γενικό "μοιάζει με label" heuristic του
+    `_FIELD_STOP_LOOKAHEAD`: αυτό απαιτεί το ':' στην ΙΔΙΑ οπτική γραμμή με το
+    label, ενώ στο section 5 το ':' συχνά είναι σε δική του γραμμή
+    (π.χ. "ΗΜΕΡΕΣ ΑΔΕΙΑΣ\n\n: 3") — οπότε δεν θα αναγνωριζόταν ως όριο και θα
+    καταπινόταν μέσα στην τιμή του προηγούμενου πεδίου. Σταματάει επίσης σε
+    κενή γραμμή, ώστε ο footer θόρυβος (βλ. πάνω) να μη μπει στην τιμή."""
+    other_labels = "|".join(_label_pattern(other) for other in _HEALTH_LABELS)
+    stop_lookahead = rf"(?:{other_labels})\s*:|\n[ \t]*\n"
+    pattern = re.compile(rf"{_label_pattern(label)}\s*:\s*(.*?)(?={stop_lookahead}|\Z)", re.DOTALL)
+    match = pattern.search(block)
+    if not match:
+        return ""
+    return re.sub(r"\s+", " ", match.group(1)).strip()
+
+
+def _iter_health_entries(text: str) -> list[dict[str, str]]:
+    """Κάθε εγγραφή Κατάστασης Υγείας (Ενότητα 5) -> dict. ΔΕΝ γενικεύει την
+    `_iter_pipe_rows`: το section δεν έχει pipe-δομή ούτε μία-ετικέτα-ανά-
+    γραμμή (βλ. `_parse_label_value_lines`) — τα labels σπάνε σε πολλαπλές
+    γραμμές, άρα χρειάζεται δικό του block-level regex parsing (`_health_field`)
+    αντί για line-based, ίδιο σκεπτικό με το PR #29: ό,τι δουλεύει δεν το
+    αγγίζουμε.
+
+    Boundary = κάθε εμφάνιση `ΗΜΕΡΟΜΗΝΙΑ:` ανοίγει νέα εγγραφή. Η τελευταία
+    εγγραφή τερματίζει στο `ε.  Ευαρέσκειες` (επόμενη υποενότητα), όχι στο
+    τέλος του κειμένου."""
+    boundary_re = re.compile(rf"^{_label_pattern('ΗΜΕΡΟΜΗΝΙΑ')}\s*:", re.MULTILINE)
+    end_match = _HEALTH_SECTION_END_RE.search(text)
+    section_end = end_match.start() if end_match else len(text)
+    starts = [m.start() for m in boundary_re.finditer(text) if m.start() < section_end]
+
+    entries: list[dict[str, str]] = []
+    for i, start in enumerate(starts):
+        end = starts[i + 1] if i + 1 < len(starts) else section_end
+        block = text[start:end]
+        entries.append({label: _health_field(block, label) for label in _HEALTH_LABELS})
+    return entries
+
+
 def _first_known_section_index(text: str, start: int = 0) -> int:
     indices = [idx for name in KNOWN_SECTIONS if (idx := text.find(name, start)) != -1]
     return min(indices) if indices else -1
@@ -266,15 +319,30 @@ def _parse_postings(text: str) -> list[PostingEntry]:
     return entries
 
 
+def _parse_leave_days(raw: str) -> int | None:
+    if not raw:
+        return None
+    try:
+        return int(raw.strip())
+    except ValueError:
+        logger.warning("Μη αριθμητικό ΗΜΕΡΕΣ ΑΔΕΙΑΣ: %r", raw, exc_info=True)
+        return None
+
+
 def _parse_health(text: str) -> list[HealthEntry]:
-    return [
-        HealthEntry(
-            category=row.get("Κατηγορία", ""),
-            description=row.get("Περιγραφή", ""),
-            date=_parse_date(row.get("Ημερομηνία")),
+    entries = []
+    for row in _iter_health_entries(text):
+        leave_days_raw = row["ΗΜΕΡΕΣ ΑΔΕΙΑΣ"]
+        entries.append(
+            HealthEntry(
+                date=_parse_date(row["ΗΜΕΡΟΜΗΝΙΑ"]),
+                opinion_ref=row["ΓΝΩΜΑΤΕΥΣΗ"] or None,
+                leave_days=_parse_leave_days(leave_days_raw),
+                leave_days_raw=leave_days_raw,
+                description=row["ΠΕΡΙΓΡΑΦΗ"],
+            )
         )
-        for row in _iter_pipe_rows(text, "Κατηγορία")
-    ]
+    return entries
 
 
 def _parse_evaluator(raw: str | None) -> EvaluatorInfo | None:
