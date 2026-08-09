@@ -13,6 +13,7 @@ ingestion/retrieval pipeline (ΟΧΙ config/env override). ΚΑΝΕΝΑ import/�
 των production defaults (backend/data/evalassist.db, backend/chroma_db).
 """
 
+import datetime
 import os
 import shutil
 import sqlite3
@@ -249,6 +250,46 @@ def main() -> int:
                             failures.append(f"{agm}: chunk metadata λείπει το κλειδί {key!r}")
 
         report.run("Ingestion", check_ingestion)
+
+        # --- Health entries: ΜΟΝΟ in-memory έλεγχος πάνω στο IngestionResult
+        # (summary_note.health_entries) — τα health entries ΔΕΝ γράφονται σε
+        # SQLite ούτε ξεχωριστά δομημένα στο ChromaDB (βλ. app/ingestion/
+        # pipeline.py: κανένα repository.upsert/replace_* για health), άρα
+        # δεν υπάρχει άλλο σημείο παρατήρησης χωρίς νέο SQLite wiring.
+        def check_health(failures: list[str]) -> None:
+            for agm, person_gt in persons_gt.items():
+                entries_gt = person_gt["health_entries"]
+                entries = results[agm].summary_note.health_entries
+                if len(entries) != len(entries_gt):
+                    failures.append(
+                        f"{agm}: {len(entries)} health entries, αναμένονταν {len(entries_gt)}"
+                    )
+                    continue
+                for got, expected in zip(entries, entries_gt):
+                    expected_date = (
+                        datetime.date.fromisoformat(expected["date"]) if expected["date"] else None
+                    )
+                    if got.date != expected_date:
+                        failures.append(f"{agm}: health.date={got.date} != {expected_date}")
+                    if got.opinion_ref != expected["opinion_ref"]:
+                        failures.append(
+                            f"{agm}: health.opinion_ref={got.opinion_ref!r} != {expected['opinion_ref']!r}"
+                        )
+                    if got.leave_days != expected["leave_days"]:
+                        failures.append(
+                            f"{agm}: health.leave_days={got.leave_days!r} != {expected['leave_days']!r}"
+                        )
+                    if got.leave_days_raw != expected["leave_days_raw"]:
+                        failures.append(
+                            f"{agm}: health.leave_days_raw={got.leave_days_raw!r} != "
+                            f"{expected['leave_days_raw']!r}"
+                        )
+                    if got.description != expected["description"]:
+                        failures.append(
+                            f"{agm}: health.description={got.description!r} != {expected['description']!r}"
+                        )
+
+        report.run("Health entries", check_health)
 
         # --- Structured mode: exact match έναντι ground truth, καμία κλήση LLM ---
         def check_structured(failures: list[str]) -> None:
