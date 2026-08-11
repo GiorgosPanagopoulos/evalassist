@@ -10,8 +10,13 @@ import json
 import sqlite3
 
 from app.db.repository import get_promotions, get_service_time
+from app.models.evaluation import KNOWN_SECTIONS
 from app.retrieval.isolation import IsolationScope
 from app.retrieval.models import StructuredResult
+
+_EVALUATION_SECTION = KNOWN_SECTIONS[-1]  # "ΣΥΝΟΛΙΚΗ ΕΜΦΑΝΙΣΗ - ΧΑΡΑΚΤΗΡΙΣΜΟΣ"
+_PROMOTIONS_SECTION = KNOWN_SECTIONS[0]  # "ΚΡΙΣΕΙΣ ΠΡΟΑΓΩΓΩΝ"
+_SERVICE_TIME_SECTION = KNOWN_SECTIONS[1]  # "ΣΥΝΟΛΙΚΟΣ ΧΡΟΝΟΣ ΥΠΗΡΕΣΙΑΣ"
 
 
 def _doc_ids_in_scope(conn: sqlite3.Connection, scope: IsolationScope) -> list[str]:
@@ -72,7 +77,7 @@ def get_scores(conn: sqlite3.Connection, scope: IsolationScope) -> StructuredRes
         "gnomatevon_notes": row["gnomatevon_notes"],
         "field_scores": _field_scores(conn, row["id"]),
     }
-    sources = [{"doc_id": doc_id, "section": "ΣΥΝΟΛΙΚΗ ΕΜΦΑΝΙΣΗ - ΧΑΡΑΚΤΗΡΙΣΜΟΣ"} for doc_id in doc_ids]
+    sources = [{"doc_id": doc_id, "section": _EVALUATION_SECTION} for doc_id in doc_ids]
     return StructuredResult(data=data, sources=sources, retrieved_doc_ids=doc_ids)
 
 
@@ -137,7 +142,7 @@ def get_promotions_table(conn: sqlite3.Connection, scope: IsolationScope) -> Str
         for row in rows
     ]
     data = {"person_id": scope.person_id, "rows": data_rows}
-    sources = [{"doc_id": doc_id, "section": "ΚΡΙΣΕΙΣ ΠΡΟΑΓΩΓΩΝ"} for doc_id in doc_ids]
+    sources = [{"doc_id": doc_id, "section": _PROMOTIONS_SECTION} for doc_id in doc_ids]
     return StructuredResult(data=data, sources=sources, retrieved_doc_ids=doc_ids)
 
 
@@ -158,5 +163,5 @@ def get_service_time_table(conn: sqlite3.Connection, scope: IsolationScope) -> S
         for row in rows
     ]
     data = {"person_id": scope.person_id, "rows": data_rows}
-    sources = [{"doc_id": doc_id, "section": "ΣΥΝΟΛΙΚΟΣ ΧΡΟΝΟΣ ΥΠΗΡΕΣΙΑΣ"} for doc_id in doc_ids]
+    sources = [{"doc_id": doc_id, "section": _SERVICE_TIME_SECTION} for doc_id in doc_ids]
     return StructuredResult(data=data, sources=sources, retrieved_doc_ids=doc_ids)
