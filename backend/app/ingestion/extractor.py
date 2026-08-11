@@ -395,6 +395,8 @@ def _split_evaluation_blocks(text: str) -> list[tuple[str, str, str, int]]:
 _BARE_ANCHOR_RE = re.compile(r"^(Ε\.Α\.|Σ\.Α\.)\s*$", re.MULTILINE)
 _DATE_TOKEN_RE = re.compile(r"^\d{2}/\d{2}/\d{4}$")
 _EVALUATOR_LABEL_RE = re.compile(r"^Αξιολογών\s*:\s*(.*)$")
+_GNOMATEVON_LABEL_RE = re.compile(r"^Γνωματεύων\s*:\s*(.*)$")
+_GNOMATEVON_NOTES_LABEL_RE = re.compile(r"^Σημειώσεις Γνωματεύοντος\s*:\s*(.*)$")
 
 # Font substitution σε πραγματικά PDF: κάποιοι Έλληνικοί χαρακτήρες
 # εμφανίζονται ως λατινικά ομόγραφα (π.χ. "EΞΑΙΡΕΤΟΣ" με λατινικό "E").
@@ -532,6 +534,26 @@ def _parse_evaluation_entry_positional(ea_type: str, block: str, page: int) -> E
         evaluator_raw = inline or (rest[evaluator_idx + 1] if evaluator_idx + 1 < len(rest) else None)
     evaluator = _parse_evaluator_fallback(evaluator_raw) or EvaluatorInfo(name="")
 
+    gnomatevon_notes_idx = next(
+        (i for i, line in enumerate(rest) if _GNOMATEVON_NOTES_LABEL_RE.match(line)), None
+    )
+    gnomatevon_idx = next(
+        (i for i, line in enumerate(rest) if _GNOMATEVON_LABEL_RE.match(line)), None
+    )
+
+    gnomatevon_notes = None
+    if gnomatevon_notes_idx is not None:
+        inline = _GNOMATEVON_NOTES_LABEL_RE.match(rest[gnomatevon_notes_idx]).group(1).strip()
+        end = gnomatevon_idx if gnomatevon_idx is not None else gnomatevon_notes_idx + 1
+        body_lines = rest[gnomatevon_notes_idx + 1 : end]
+        gnomatevon_notes = " ".join(line for line in [inline, *body_lines] if line) or None
+
+    gnomatevon_raw = None
+    if gnomatevon_idx is not None:
+        inline = _GNOMATEVON_LABEL_RE.match(rest[gnomatevon_idx]).group(1).strip()
+        gnomatevon_raw = inline or (rest[gnomatevon_idx + 1] if gnomatevon_idx + 1 < len(rest) else None)
+    gnomatevon = _parse_evaluator_fallback(gnomatevon_raw)
+
     return EvaluationEntry(
         period_start=_parse_date(d1),
         period_end=_parse_date(d2),
@@ -540,6 +562,8 @@ def _parse_evaluation_entry_positional(ea_type: str, block: str, page: int) -> E
         ea_type=ea_type,
         unit=unit,
         evaluator=evaluator,
+        gnomatevon=gnomatevon,
+        gnomatevon_notes=gnomatevon_notes,
         field_scores=_parse_field_scores_positional(block),
         source_page=page,
     )
