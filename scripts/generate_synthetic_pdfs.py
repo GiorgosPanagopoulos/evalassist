@@ -82,13 +82,22 @@ def _esc(value) -> str:
 
 def _row(*pairs: tuple[str, object]) -> str:
     """Μία γραμμή πίνακα: 'Ετικέτα: τιμή | Ετικέτα: τιμή | ...'."""
-    parts = [f"{label}: {_esc(value)}" for label, value in pairs if value is not None]
+    for label, value in pairs:
+        if value is None:
+            raise ValueError(
+                f"_row: το πεδίο '{label}' είναι None στο fixture. Για κενό "
+                'πεδίο πρέπει να δοθεί ρητά "" — το None δεν εκπέμπεται σιωπηλά.'
+            )
+    parts = [f"{label}: {_esc(value)}" for label, value in pairs]
     return f'<div class="row">{" | ".join(parts)}</div>'
 
 
 def _scalar(label: str, value) -> str:
     if value is None:
-        return ""
+        raise ValueError(
+            f"_scalar: το πεδίο '{label}' είναι None στο fixture. Για κενό "
+            'πεδίο πρέπει να δοθεί ρητά "" — το None δεν εκπέμπεται σιωπηλά.'
+        )
     return f'<div class="field">{label}: {_esc(value)}</div>'
 
 
@@ -119,9 +128,9 @@ def _person_page(person: dict) -> str:
     return "\n".join(lines)
 
 
-def _fmt_date(iso_date: str | None) -> str | None:
+def _fmt_date(iso_date: str | None) -> str:
     if not iso_date:
-        return None
+        return ""
     year, month, day = iso_date.split("-")
     return f"{day}/{month}/{year}"
 

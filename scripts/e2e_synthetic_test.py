@@ -11,6 +11,10 @@ Isolation από production: ίδιο pattern με evals/run_evals.py — προ
 SQLite + προσωρινό ChromaDB σε tempdir, direct param injection στο
 ingestion/retrieval pipeline (ΟΧΙ config/env override). ΚΑΝΕΝΑ import/χρήση
 των production defaults (backend/data/evalassist.db, backend/chroma_db).
+
+Στο ground truth, "" σε postings date_to/days δηλώνει ανοιχτή τοποθέτηση· ο
+parser το επιστρέφει ως None (extractor.py:_parse_date/_parse_int) — ένα
+μελλοντικό check_postings πρέπει να συγκρίνει με None, όχι με "".
 """
 
 import datetime
