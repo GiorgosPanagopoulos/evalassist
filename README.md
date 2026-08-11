@@ -215,6 +215,7 @@ cd frontend && npm test
 ### Running on macOS
 
 - Tesseract OCR with the Greek language pack: `brew install tesseract tesseract-lang`
+- Synthetic fixture generation: `scripts/generate_synthetic_pdfs.py` (dev/test only) requires WeasyPrint, which needs pango installed at the system level: `brew install pango`, then `pip install -r backend/requirements-dev.txt`. The script sets `DYLD_LIBRARY_PATH` automatically, no manual export needed. Without pango installed, WeasyPrint fails with `cannot load library 'libgobject-2.0-0'`.
 - Metal acceleration is used automatically by Ollama, no extra configuration needed
 - On machines with 8GB RAM, prefer the smaller model: `ollama pull qwen2.5:7b` and set `OLLAMA_MODEL=qwen2.5:7b` in `backend/.env`
 

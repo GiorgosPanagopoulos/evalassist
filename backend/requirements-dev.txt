@@ -1,0 +1,4 @@
+# Local dev tooling only, for scripts/generate_synthetic_pdfs.py.
+# Not needed for production and not needed for CI.
+# Requires system-level pango (brew install pango on macOS).
+weasyprint==69.0
