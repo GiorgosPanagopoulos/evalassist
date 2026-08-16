@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS evaluations (
     period_start        TEXT NOT NULL,
     period_end          TEXT NOT NULL,
     ea_type             TEXT NOT NULL CHECK (ea_type IN ('Ε.Α.', 'Σ.Α.')),
-    characterization    TEXT NOT NULL,
+    characterization    TEXT,  -- NULL για Σ.Α. περιόδους χωρίς επίσημο χαρακτηρισμό (βλ. _parse_evaluation_entry_positional)
     score               INTEGER CHECK (score IS NULL OR score BETWEEN 0 AND 100),
     unit                TEXT NOT NULL,
     duties              TEXT,  -- JSON array

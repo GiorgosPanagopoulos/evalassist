@@ -30,7 +30,7 @@ KNOWN_SECTIONS: list[str] = [
     "ΣΥΝΟΛΙΚΗ ΕΜΦΑΝΙΣΗ - ΧΑΡΑΚΤΗΡΙΣΜΟΣ",
 ]
 
-CHARACTERIZATIONS: list[str] = ["ΕΞΑΙΡΕΤΟΣ", "ΛΙΑΝ ΚΑΛΟΣ", "ΚΑΛΟΣ", "ΜΕΤΡΙΟΣ", "ΜΗ ΑΠΟΔΕΚΤΟΣ", "ΔΥ"]
+CHARACTERIZATIONS: list[str] = ["ΕΞΑΙΡΕΤΟΣ", "ΛΙΑΝ ΚΑΛΟΣ", "ΚΑΛΟΣ", "ΜΕΤΡΙΟΣ", "ΜΗ ΑΠΟΔΕΚΤΟΣ"]
 
 # Σύμβαση period για ενότητες που δεν ανήκουν σε συγκεκριμένη περίοδο
 # αξιολόγησης (πτυχία, τοποθετήσεις, χρόνος υπηρεσίας, κρίσεις προαγωγών,
@@ -131,7 +131,9 @@ class EvaluatorInfo(BaseModel):
 class EvaluationEntry(BaseModel):
     period_start: datetime.date
     period_end: datetime.date
-    characterization: Literal["ΕΞΑΙΡΕΤΟΣ", "ΛΙΑΝ ΚΑΛΟΣ", "ΚΑΛΟΣ", "ΜΕΤΡΙΟΣ", "ΜΗ ΑΠΟΔΕΚΤΟΣ", "ΔΥ"]
+    characterization: Optional[
+        Literal["ΕΞΑΙΡΕΤΟΣ", "ΛΙΑΝ ΚΑΛΟΣ", "ΚΑΛΟΣ", "ΜΕΤΡΙΟΣ", "ΜΗ ΑΠΟΔΕΚΤΟΣ"]
+    ] = Field(default=None, description="Σ.Α. περίοδοι χωρίς αριθμητική βαθμολογία δεν έχουν χαρακτηρισμό")
     score: Optional[int] = Field(default=None, ge=0, le=100)
     ea_type: Literal["Ε.Α.", "Σ.Α."]
     unit: str
