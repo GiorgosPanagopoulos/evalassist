@@ -441,12 +441,12 @@ def _parse_evaluator_fallback(raw: str | None) -> EvaluatorInfo | None:
 
 def _parse_characterization_token(raw: str | None) -> tuple[str | None, int | None]:
     """Χαρακτηρισμός+βαθμολογία σε μία γραμμή, real-PDF μορφή (π.χ.
-    "EΞΑΙΡΕΤΟΣ (100)"). Καλύπτει και bare "ΔΥ" (Σ.Α. περιόδους χωρίς
-    αριθμητική βαθμολογία — score παραμένει None) αφού είναι μέλος του
-    CHARACTERIZATIONS (single source of truth, βλ. models/evaluation.py).
-    Επιστρέφει (None, None) μόνο αν δεν αντιστοιχεί σε κανέναν γνωστό
-    χαρακτηρισμό — ο caller παραλείπει τέτοιες (πραγματικά άγνωστες)
-    εγγραφές αντί να επινοήσει τιμή εκτός Literal."""
+    "EΞΑΙΡΕΤΟΣ (100)"), έναντι του CHARACTERIZATIONS (single source of
+    truth, βλ. models/evaluation.py). Επιστρέφει (None, None) αν το token
+    δεν αντιστοιχεί σε κανέναν γνωστό χαρακτηρισμό — ο caller (βλ.
+    _parse_evaluation_entry_positional) το αντιμετωπίζει ως lookahead: δεν
+    καταναλώνει το token, το αφήνει να διαβαστεί ως μονάδα (π.χ. bare "ΔΥ" =
+    "Διοίκηση Υποβρυχίων", μονάδα — ΔΕΝ είναι μέλος του CHARACTERIZATIONS)."""
     if not raw:
         return None, None
     match = _CHARACTERIZATION_RE.match(raw.strip())
@@ -496,12 +496,23 @@ def _parse_field_scores_positional(block: str) -> list[FieldScore]:
 def _parse_evaluation_entry_positional(ea_type: str, block: str, page: int) -> EvaluationEntry | None:
     """Θεσιακός (positional) parser για entries χωρίς labels (πραγματικό PDF
     layout, σελ. 4-8 του δείγματος): "Ε.Α./Σ.Α." anchor, μετά ημερομηνία /
-    "-" / ημερομηνία, μετά "Χαρακτηρισμός (βαθμός)" σε μία γραμμή (ή bare
-    "ΔΥ" χωρίς βαθμό, βλ. _parse_characterization_token), μετά
-    μονάδα/καθήκοντα σε ελεύθερες γραμμές, μετά "Αξιολογών:" + η γραμμή με το
-    ονοματεπώνυμο. Επιστρέφει None αν δεν αναγνωρίζεται έγκυρη περίοδος ή
-    χαρακτηρισμός εκτός CHARACTERIZATIONS — τέτοιες (πραγματικά άγνωστες)
-    εγγραφές παραλείπονται αντί να επινοηθεί μη-πραγματική τιμή."""
+    "-" / ημερομηνία, μετά ΠΡΟΑΙΡΕΤΙΚΑ "Χαρακτηρισμός (βαθμός)" σε μία γραμμή
+    (βλ. _parse_characterization_token), μετά μονάδα/καθήκοντα σε ελεύθερες
+    γραμμές, μετά "Αξιολογών:" + η γραμμή με το ονοματεπώνυμο. Ο χαρακτηρισμός
+    είναι LOOKAHEAD, όχι unconditional consume, ΜΟΝΟ όμως για Σ.Α.: τα Σ.Α.
+    blocks του πραγματικού PDF δεν έχουν καθόλου γραμμή χαρακτηρισμού — το
+    token μετά τις ημερομηνίες είναι ήδη η μονάδα (π.χ. bare "ΔΥ" = "Διοίκηση
+    Υποβρυχίων", μονάδα, όχι χαρακτηρισμός), οπότε ΔΕΝ καταναλώνεται εδώ και
+    characterization/score μένουν None. Για Ε.Α. ΟΛΑ τα blocks του
+    πραγματικού PDF ΕΧΟΥΝ γραμμή χαρακτηρισμού (32/32, μετρημένο) — αν το
+    token εκεί δεν αναγνωρίζεται ως γνωστός χαρακτηρισμός πρόκειται για
+    αλλοιωμένο/άγνωστο token (OCR, ομόγραφο, τυπογραφικό), ΟΧΙ για μονάδα:
+    αντιμετώπισή του ως μονάδα θα μετατόπιζε σιωπηλά την πραγματική μονάδα
+    προς απώλεια (σιωπηλή παραμόρφωση, χειρότερη από σιωπηλή απόρριψη σε
+    σύστημα υποβοήθησης κρίσεων προαγωγών) — οπότε η εγγραφή απορρίπτεται
+    (None), ΜΕ log (βλ. logger.warning παρακάτω), όχι σιωπηλά. Επιστρέφει
+    None είτε όταν δεν αναγνωρίζεται έγκυρη περίοδος είτε όταν πρόκειται για
+    Ε.Α. με μη αναγνωρισμένο χαρακτηρισμό."""
     lines = [line.strip() for line in block.splitlines() if line.strip()]
     if not lines:
         return None
@@ -515,13 +526,32 @@ def _parse_evaluation_entry_positional(ea_type: str, block: str, page: int) -> E
         idx += 1
         return value
 
+    def _peek() -> str | None:
+        return lines[idx] if idx < len(lines) else None
+
     d1, dash, d2 = _take(), _take(), _take()
     if not (d1 and _DATE_TOKEN_RE.match(d1) and dash == "-" and d2 and _DATE_TOKEN_RE.match(d2)):
         return None
 
-    characterization, score = _parse_characterization_token(_take())
-    if characterization is None:
+    token = _peek()
+    characterization, score = _parse_characterization_token(token)
+    if characterization is not None:
+        idx += 1  # το token ήταν πράγματι χαρακτηρισμός· καταναλώνεται τώρα
+    elif ea_type == "Ε.Α.":
+        # Μόνο Σ.Α. blocks του πραγματικού PDF δεν έχουν γραμμή χαρακτηρισμού
+        # (βλ. docstring). Ε.Α. χωρίς αναγνωρισμένο χαρακτηρισμό είναι
+        # αλλοιωμένο/άγνωστο token (OCR, ομόγραφο, τυπογραφικό) — αν γινόταν
+        # δεκτό ως μονάδα θα μετατόπιζε σιωπηλά την πραγματική μονάδα προς
+        # απώλεια. Απορρίπτεται, ΜΕ log αντί για σιωπή.
+        logger.warning(
+            "Ε.Α. entry απορρίφθηκε: μη αναγνωρισμένος χαρακτηρισμός %r (περίοδος %s - %s)",
+            token,
+            d1,
+            d2,
+        )
         return None
+    else:
+        logger.info("Σ.Α. entry χωρίς χαρακτηρισμό γίνεται δεκτό (περίοδος %s - %s)", d1, d2)
 
     rest = lines[idx:]
     evaluator_idx = next((i for i, line in enumerate(rest) if _EVALUATOR_LABEL_RE.match(line)), len(rest))

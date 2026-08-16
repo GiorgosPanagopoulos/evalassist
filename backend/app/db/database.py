@@ -1,3 +1,4 @@
+import re
 import sqlite3
 from pathlib import Path
 
@@ -51,12 +52,89 @@ def _migrate_service_time_check(conn: sqlite3.Connection) -> None:
         conn.execute("DROP TABLE service_time")
 
 
+_EVALUATIONS_COLUMNS = (
+    "id, person_id, period, period_start, period_end, ea_type, characterization, "
+    "score, unit, duties, rank_at_time, evaluator_rank, evaluator_name, evaluator_role, "
+    "gnomatevon_rank, gnomatevon_name, gnomatevon_role, defects, evaluator_notes, "
+    "gnomatevon_notes, source_page, created_at"
+)
+
+_EVALUATIONS_NOT_NULL_RE = re.compile(r"characterization\s+TEXT\s+NOT\s+NULL")
+
+
+def _migrate_evaluations_characterization_nullable(conn: sqlite3.Connection) -> None:
+    """DBs δημιουργημένες πριν αφαιρεθεί το ψευδεπίγραφο "ΔΥ" χαρακτηρισμό
+    (βλ. app.models.evaluation.CHARACTERIZATIONS) έχουν
+    `characterization TEXT NOT NULL` ήδη αποθηκευμένο στο sqlite_master. Το
+    SQLite ΔΕΝ υποστηρίζει ALTER TABLE για DROP NOT NULL.
+
+    Σε αντίθεση με το `_migrate_service_time_check`, το `evaluations` ΔΕΝ
+    είναι παράγωγος πίνακας: `upsert_evaluation` κάνει ON CONFLICT DO
+    UPDATE (όχι delete-then-insert), το `field_scores.eval_id` αναφέρεται
+    στα `evaluations.id`, και το `created_at` είναι ανθρωπογενές ιστορικό.
+    Άρα table rebuild με ρητή αντιγραφή όλων των γραμμών/στηλών (id και
+    created_at ΣΥΜΠΕΡΙΛΑΜΒΑΝΟΝΤΑΙ), όχι DROP+recreate."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'evaluations'"
+    ).fetchone()
+    if row is None or row[0] is None or not _EVALUATIONS_NOT_NULL_RE.search(row[0]):
+        return
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute(
+        """
+        CREATE TABLE evaluations_new (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            person_id           TEXT NOT NULL REFERENCES persons(person_id),
+            period              TEXT NOT NULL,
+            period_start        TEXT NOT NULL,
+            period_end          TEXT NOT NULL,
+            ea_type             TEXT NOT NULL CHECK (ea_type IN ('Ε.Α.', 'Σ.Α.')),
+            characterization    TEXT,
+            score               INTEGER CHECK (score IS NULL OR score BETWEEN 0 AND 100),
+            unit                TEXT NOT NULL,
+            duties              TEXT,
+            rank_at_time        TEXT,
+            evaluator_rank      TEXT,
+            evaluator_name      TEXT NOT NULL,
+            evaluator_role      TEXT,
+            gnomatevon_rank     TEXT,
+            gnomatevon_name     TEXT,
+            gnomatevon_role     TEXT,
+            defects             TEXT,
+            evaluator_notes     TEXT,
+            gnomatevon_notes    TEXT,
+            source_page         INTEGER,
+            created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE (person_id, period)
+        )
+        """
+    )
+    conn.execute(
+        f"INSERT INTO evaluations_new ({_EVALUATIONS_COLUMNS}) "
+        f"SELECT {_EVALUATIONS_COLUMNS} FROM evaluations"
+    )
+    conn.execute("DROP TABLE evaluations")
+    conn.execute("ALTER TABLE evaluations_new RENAME TO evaluations")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_evaluations_person_period "
+        "ON evaluations(person_id, period)"
+    )
+    violations = conn.execute("PRAGMA foreign_key_check").fetchall()
+    if violations:
+        raise sqlite3.IntegrityError(
+            f"PRAGMA foreign_key_check βρήκε παραβιάσεις μετά το evaluations rebuild: {violations}"
+        )
+    conn.execute("PRAGMA foreign_keys = ON")
+
+
 def init_db(db_path: Path = DB_PATH) -> None:
     conn = get_connection(db_path)
     try:
         _migrate_service_time_check(conn)
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
         _migrate_audit_log(conn)
+        _migrate_evaluations_characterization_nullable(conn)
         conn.commit()
     finally:
         conn.close()
