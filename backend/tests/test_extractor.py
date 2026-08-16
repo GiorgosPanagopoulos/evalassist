@@ -18,6 +18,7 @@ from app.ingestion.extractor import (  # noqa: E402
     _field,
     _iter_pipe_rows,
     _parse_evaluation_entry_positional,
+    _parse_evaluator_fallback,
 )
 
 
@@ -202,10 +203,13 @@ def test_positional_parser_real_block_28_ke_palaskas():
     # "Ε" U+0395).
     assert ord(entry.unit[0]) == 0x039A, "'Κ' πρέπει να είναι Greek Kappa U+039A"
     assert ord(entry.unit[1]) == 0x0395, "'Ε' πρέπει να είναι Greek Epsilon U+0395"
-    assert entry.evaluator.name == "(Μ) ΕΥΑΓΓΕΛΟΣ ΚΟΡΩΝΑΚΗΣ"
+    # Β4: το qualifier σώματος "(Μ)" ανήκει στον βαθμό, όχι στο όνομα (βλ.
+    # private/prompts/B4_EVALUATOR_RANK_QUALIFIER.md).
+    assert entry.evaluator.rank == "ΑΝΤΧΟΣ (Μ)"
+    assert entry.evaluator.name == "ΕΥΑΓΓΕΛΟΣ ΚΟΡΩΝΑΚΗΣ"
     # Latin "M" U+004D vs Greek Mu "Μ" U+039C — homoglyph, εύκολο λάθος στο
     # ίδιο το test αν πληκτρολογηθεί με το λάθος alphabet.
-    assert ord(entry.evaluator.name[1]) == 0x039C, "'Μ' πρέπει να είναι Greek Mu U+039C, όχι Latin M U+004D"
+    assert ord(entry.evaluator.rank[8]) == 0x039C, "'Μ' πρέπει να είναι Greek Mu U+039C, όχι Latin M U+004D"
 
 
 def test_positional_parser_real_block_33_fg_psara():
@@ -232,6 +236,79 @@ def test_positional_parser_real_block_33_fg_psara():
     assert entry.evaluator.name == "ΤΗΛΕΜΑΧΟΣ ΠΟΥΛΗΣ"
 
 
+# --- Β4: qualifier σώματος/ειδικότητας ανήκει στον βαθμό, όχι στο όνομα ---
+# (βλ. private/prompts/B4_EVALUATOR_RANK_QUALIFIER.md). Direct unit tests
+# του _parse_evaluator_fallback, ΟΧΙ μόνο έμμεσα μέσω του positional parser
+# (Ζ3 - πριν δεν υπήρχε κανένα direct test της συνάρτησης).
+
+
+def test_parse_evaluator_fallback_attaches_M_qualifier_to_rank():
+    evaluator = _parse_evaluator_fallback("ΑΝΤΧΟΣ (Μ) ΕΥΑΓΓΕΛΟΣ ΚΟΡΩΝΑΚΗΣ - ΔΙΕΥΘΥΝΤΗΣ ΣΠΟΥΔΩΝ")
+
+    assert evaluator is not None
+    assert evaluator.rank == "ΑΝΤΧΟΣ (Μ)"
+    assert evaluator.name == "ΕΥΑΓΓΕΛΟΣ ΚΟΡΩΝΑΚΗΣ"
+    assert evaluator.role == "ΔΙΕΥΘΥΝΤΗΣ ΣΠΟΥΔΩΝ"
+    # MUTATION CHECK: αν η προσάρτηση του qualifier στον βαθμό αφαιρεθεί
+    # (παλιά συμπεριφορά), name θα ξεκινούσε με "(Μ) ..." αντί να είναι
+    # καθαρό ονοματεπώνυμο.
+    assert not evaluator.name.startswith("("), "το qualifier δεν πρέπει να μείνει στο name"
+    assert ord(evaluator.rank[8]) == 0x039C, "'Μ' πρέπει να είναι Greek Mu U+039C, όχι Latin M U+004D"
+
+
+def test_parse_evaluator_fallback_attaches_DY_qualifier_to_rank():
+    evaluator = _parse_evaluator_fallback("ΑΝΘΥΠΧΟΣ (ΔΥ) ΝΙΚΟΛΑΟΣ ΠΑΠΑΣ - ΥΠΑΣΠΙΣΤΗΣ")
+
+    assert evaluator is not None
+    assert evaluator.rank == "ΑΝΘΥΠΧΟΣ (ΔΥ)"
+    assert evaluator.name == "ΝΙΚΟΛΑΟΣ ΠΑΠΑΣ"
+    assert evaluator.role == "ΥΠΑΣΠΙΣΤΗΣ"
+    # Codepoint assertions: το "(ΔΥ)" εδώ (σε παρένθεση, μετά τον βαθμό
+    # αξιολογητή) σημαίνει "Διοικητικής Υποστήριξης" — ΔΙΑΦΟΡΕΤΙΚΟ από το
+    # bare "ΔΥ" σε θέση ΜΟΝΑΔΑΣ ("Διοίκηση Υποβρυχίων", βλ. PR #36).
+    assert ord(evaluator.rank[10]) == 0x0394, "'Δ' πρέπει να είναι Greek Delta U+0394"
+    assert ord(evaluator.rank[11]) == 0x03A5, "'Υ' πρέπει να είναι Greek Upsilon U+03A5"
+
+
+def test_parse_evaluator_fallback_attaches_TY_qualifier_to_rank():
+    evaluator = _parse_evaluator_fallback("ΑΝΘΥΠΧΟΣ (ΤΥ) ΝΙΚΟΛΑΟΣ ΠΑΠΑΣ - ΥΠΑΣΠΙΣΤΗΣ")
+
+    assert evaluator is not None
+    assert evaluator.rank == "ΑΝΘΥΠΧΟΣ (ΤΥ)"
+    assert evaluator.name == "ΝΙΚΟΛΑΟΣ ΠΑΠΑΣ"
+    assert evaluator.role == "ΥΠΑΣΠΙΣΤΗΣ"
+    assert ord(evaluator.rank[10]) == 0x03A4, "'Τ' πρέπει να είναι Greek Tau U+03A4"
+    assert ord(evaluator.rank[11]) == 0x03A5, "'Υ' πρέπει να είναι Greek Upsilon U+03A5"
+
+
+def test_parse_evaluator_fallback_regression_no_qualifier_multiple_spaces():
+    # Χωρίς qualifier, πολλαπλά κενά ανάμεσα σε βαθμό και όνομα (πραγματικό
+    # PDF layout) — αμετάβλητο από το fix.
+    evaluator = _parse_evaluator_fallback("ΑΝΤΧΟΣ   ΤΗΛΕΜΑΧΟΣ ΠΟΥΛΗΣ - ΚΥΒΕΡΝΗΤΗΣ")
+
+    assert evaluator is not None
+    assert evaluator.rank == "ΑΝΤΧΟΣ"
+    assert evaluator.name == "ΤΗΛΕΜΑΧΟΣ ΠΟΥΛΗΣ"
+    assert evaluator.role == "ΚΥΒΕΡΝΗΤΗΣ"
+    # MUTATION CHECK: αν ο έλεγχος qualifier ενεργοποιείται λανθασμένα και σε
+    # μη-παρενθετικά tokens, το "ΤΗΛΕΜΑΧΟΣ" θα καταναλωνόταν ως qualifier και
+    # το rank θα γινόταν "ΑΝΤΧΟΣ ΤΗΛΕΜΑΧΟΣ".
+    assert evaluator.rank == "ΑΝΤΧΟΣ", "μη-παρενθετικό token δεν πρέπει να προσαρτάται στον βαθμό"
+
+
+def test_parse_evaluator_fallback_qualifier_without_name_returns_none():
+    # Ζ2 - ΔΕΥΤΕΡΟ bug που βρέθηκε στο recon: raw = μόνο βαθμός + qualifier,
+    # χωρίς όνομα. Πριν το fix επέστρεφε EvaluatorInfo(name="(Μ)") αντί για
+    # None. Ξεχωριστό test, ξεχωριστό mutation check (Ζ2 - όχι συγχωνευμένο
+    # με το κύριο qualifier test).
+    evaluator = _parse_evaluator_fallback("ΑΝΤΧΟΣ (Μ)")
+
+    assert evaluator is None, "χωρίς όνομα μετά το qualifier πρέπει να επιστρέφεται None"
+    # MUTATION CHECK: αν το "if name else None" γίνει "if name is not None"
+    # (falsy-empty-string δεν θα πιανόταν), θα επιστρεφόταν EvaluatorInfo με
+    # name="" (invalid/misleading) αντί για None.
+
+
 def run_all():
     tests = [
         test_field_matches_whitespace_before_colon,
@@ -244,6 +321,11 @@ def run_all():
         test_positional_parser_still_rejects_invalid_period,
         test_positional_parser_real_block_28_ke_palaskas,
         test_positional_parser_real_block_33_fg_psara,
+        test_parse_evaluator_fallback_attaches_M_qualifier_to_rank,
+        test_parse_evaluator_fallback_attaches_DY_qualifier_to_rank,
+        test_parse_evaluator_fallback_attaches_TY_qualifier_to_rank,
+        test_parse_evaluator_fallback_regression_no_qualifier_multiple_spaces,
+        test_parse_evaluator_fallback_qualifier_without_name_returns_none,
     ]
     for test in tests:
         test()

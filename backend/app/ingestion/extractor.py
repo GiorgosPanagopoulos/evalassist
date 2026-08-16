@@ -422,8 +422,21 @@ def _split_positional_blocks(text: str) -> list[tuple[str, str, int]]:
 
 
 def _parse_evaluator_fallback(raw: str | None) -> EvaluatorInfo | None:
-    """Real-PDF μορφή αξιολογούντος: "ΒΑΘΜΟΣ   Ονοματεπώνυμο - Ρόλος" (όχι
-    comma-separated όπως στη labeled μορφή, βλ. _parse_evaluator)."""
+    """Real-PDF μορφή αξιολογούντος: "ΒΑΘΜΟΣ [(qualifier)]  Ονοματεπώνυμο -
+    Ρόλος" (όχι comma-separated όπως στη labeled μορφή, βλ. _parse_evaluator).
+
+    Το qualifier σώματος/ειδικότητας (π.χ. "(Μ)", "(ΔΥ)", "(ΤΥ)") είναι token
+    ΑΜΕΣΩΣ μετά τον βαθμό που ξεκινά με "(" και κλείνει με ")" — ανήκει στον
+    βαθμό, όχι στο όνομα (βλ. private/prompts/B4_EVALUATOR_RANK_QUALIFIER.md).
+
+    ΠΡΟΣΟΧΗ - διπλή σημασία του "ΔΥ": εδώ, ΣΕ ΠΑΡΕΝΘΕΣΗ αμέσως μετά τον
+    βαθμό αξιολογητή, "(ΔΥ)" = "Διοικητικής Υποστήριξης". Είναι ΔΙΑΦΟΡΕΤΙΚΟ
+    από το bare "ΔΥ" (χωρίς παρένθεση) σε θέση ΜΟΝΑΔΑΣ μέσα σε Ε.Α./Σ.Α.
+    block, όπου σημαίνει "Διοίκηση Υποβρυχίων" (βλ.
+    _parse_evaluation_entry_positional, PR #36 / B2_CHARACTERIZATION_FIX.md).
+    Διακρίνονται ΜΟΝΟ από τη θέση (μετά βαθμό αξιολογητή, όχι μετά
+    ημερομηνίες περιόδου) και την παρένθεση.
+    """
     if not raw:
         return None
     raw = raw.strip()
@@ -435,7 +448,20 @@ def _parse_evaluator_fallback(raw: str | None) -> EvaluatorInfo | None:
     else:
         left, role = raw, None
     parts = left.split(None, 1)
-    rank, name = (parts[0], parts[1].strip()) if len(parts) == 2 else (None, left.strip())
+    if len(parts) != 2:
+        name = left.strip()
+        return EvaluatorInfo(name=name, role=role) if name else None
+    rank, rest = parts[0], parts[1]
+    rest_parts = rest.split(None, 1)
+    if rest_parts and rest_parts[0].startswith("(") and rest_parts[0].endswith(")"):
+        # Qualifier σώματος/ειδικότητας — π.χ. "(Μ)". ΓΝΩΣΤΟ ΟΡΙΟ: αν το
+        # qualifier περιέχει εσωτερικό κενό (υποθετικό, π.χ. "(Ε Α)"), το
+        # split(None, 1) θα το έκοβε στη μέση και δεν θα αναγνωριζόταν ως
+        # qualifier — δεν εμφανίζεται στο πραγματικό PDF, δεν καλύπτεται.
+        rank = f"{rank} {rest_parts[0]}"
+        name = rest_parts[1].strip() if len(rest_parts) == 2 else ""
+    else:
+        name = rest.strip()
     return EvaluatorInfo(rank=rank, name=name, role=role) if name else None
 
 
