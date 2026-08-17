@@ -683,7 +683,13 @@ def extract_summary_note(
     full_text: str, section_chunks: list[SectionChunk]
 ) -> tuple[SummaryNote, list[str]]:
     """Επιστρέφει (SummaryNote, raw_evaluation_texts) — το δεύτερο έχει την
-    ίδια σειρά/μήκος με `SummaryNote.evaluations`, ένα raw κείμενο ανά entry."""
+    ίδια σειρά/μήκος με `SummaryNote.evaluations`, ένα raw κείμενο ανά entry.
+
+    `section_chunks` πρέπει να είναι το UNSPLIT αποτέλεσμα
+    (`chunker.chunk_by_section_unsplit`), όχι το split/overlap output του
+    `chunker.chunk_by_section`: το `joined()`/`_concat_with_offsets`
+    παρακάτω κάνουν "\n".join χωρίς de-dup, άρα split chunks με overlap θα
+    εμφάνιζαν το ίδιο κείμενο δύο φορές (βλ. docstring στο chunker.py)."""
     by_section: dict[str, list[SectionChunk]] = {}
     for chunk in section_chunks:
         if chunk.section is not None:

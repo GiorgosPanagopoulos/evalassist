@@ -20,7 +20,12 @@ from pathlib import Path
 
 from app.db import repository
 from app.db.database import DB_PATH, get_connection, init_db
-from app.ingestion.chunker import PageText, chunk_by_section, split_text_if_long
+from app.ingestion.chunker import (
+    PageText,
+    chunk_by_section_unsplit,
+    split_long_chunks,
+    split_text_if_long,
+)
 from app.ingestion.context_header import add_section_context_header
 from app.ingestion.duty_categories import extract_duty_categories_from_pdf, label_duty_category_rows
 from app.ingestion.embedder import Embedder
@@ -77,9 +82,15 @@ def run_ingestion(
     pages = [PageText(page=p.page, text=p.text) for p in parsed_pages]
     full_text = "\n".join(p.text for p in pages)
 
-    section_chunks = chunk_by_section(pages, doc_id)
+    # ΜΙΑ κλήση section-detection, δύο όψεις πάνω στο ΙΔΙΟ αποτέλεσμα: ο
+    # extractor διαβάζει το unsplit chunks (κείμενο μιας ενότητας ακριβώς
+    # μία φορά, βλ. docstring του chunk_by_section_unsplit), το split
+    # (με το σκόπιμο retrieval overlap) πάει στο Chroma path παρακάτω.
+    # Δύο ανεξάρτητες κλήσεις detection θα μπορούσαν να αποκλίνουν.
+    unsplit_section_chunks = chunk_by_section_unsplit(pages, doc_id)
+    section_chunks = split_long_chunks(unsplit_section_chunks)
     fallback_used = bool(section_chunks) and section_chunks[0].fallback
-    summary_note, eval_raw_texts = extract_summary_note(full_text, section_chunks)
+    summary_note, eval_raw_texts = extract_summary_note(full_text, unsplit_section_chunks)
 
     person_id = summary_note.person.agm
 
