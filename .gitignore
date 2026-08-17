@@ -13,6 +13,8 @@ backend/data/
 # Vector store persistence
 chroma_db/
 backend/chroma_db/
+chroma_db*.bak/
+backend/chroma_db*.bak/
 
 # Ingested source PDFs
 data/raw_pdfs/
