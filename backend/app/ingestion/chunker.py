@@ -200,7 +200,7 @@ def split_text_if_long(text: str) -> list[str]:
     return _get_sub_splitter().split_text(text)
 
 
-def _split_long_chunks(chunks: list[SectionChunk]) -> list[SectionChunk]:
+def split_long_chunks(chunks: list[SectionChunk]) -> list[SectionChunk]:
     result: list[SectionChunk] = []
     for chunk in chunks:
         for piece in split_text_if_long(chunk.text):
@@ -216,8 +216,35 @@ def _split_long_chunks(chunks: list[SectionChunk]) -> list[SectionChunk]:
     return result
 
 
-def chunk_by_section(pages: list[PageText], doc_id: str) -> list[SectionChunk]:
+def chunk_by_section_unsplit(pages: list[PageText], doc_id: str) -> list[SectionChunk]:
+    """Section-detection ΧΩΡΙΣ το sub-split του `chunk_by_section` (βλ. εκεί) —
+    κάθε ενότητα παραμένει ΕΝΑ chunk, όσο μεγάλη κι αν είναι.
+
+    Δύο διαφορετικές όψεις του ίδιου section-detection εξυπηρετούν δύο
+    διαφορετικούς καταναλωτές:
+      - Ο extractor (structured parsing, `extract_summary_note`) θέλει το
+        κείμενο μιας ενότητας ΑΚΡΙΒΩΣ μία φορά. Αν μια ενότητα ξεπερνά το
+        MAX_CHUNK_CHARS, το `split_long_chunks` τη σπάει σε sub-chunks με
+        45-96 chars overlap· ο extractor ενώνει τα chunks μιας ενότητας με
+        απλό "\n".join χωρίς de-dup (βλ. `joined()`/`_concat_with_offsets`
+        στο extractor.py) — αν διάβαζε τα split sub-chunks, το overlap θα
+        εμφανιζόταν διπλό μέσα στο κείμενο. Αυτό ΔΕΝ αφορά μόνο την
+        Ενότητα 7 (ΣΥΝΟΛΙΚΗ ΕΜΦΑΝΙΣΗ - ΧΑΡΑΚΤΗΡΙΣΜΟΣ, όπου εμφανίζεται
+        σήμερα): το `joined()` τροφοδοτεί ΟΛΕΣ τις career ενότητες
+        (ΚΡΙΣΕΙΣ ΠΡΟΑΓΩΓΩΝ, ΣΥΝΟΛΙΚΟΣ ΧΡΟΝΟΣ ΥΠΗΡΕΣΙΑΣ, ΠΤΥΧΙΑ,
+        ΤΟΠΟΘΕΤΗΣΕΙΣ, ΣΤΟΙΧΕΙΑ ΣΥΝΗΓΟΡΟΥΝΤΑ) και θα μολυνόταν εξίσου αν
+        οποιαδήποτε από αυτές ξεπερνούσε τους 1500 χαρακτήρες.
+      - Το Chroma path (semantic retrieval) θέλει ακριβώς το split, με το
+        overlap: συμφραζόμενα στα όρια βελτιώνουν το retrieval quality.
+        Εκεί το overlap είναι σκόπιμο, όχι bug — ΔΕΝ αφαιρείται.
+
+    `chunk_by_section() == split_long_chunks(chunk_by_section_unsplit())`.
+    """
     known_chunks = _known_section_chunks(pages, doc_id)
     if known_chunks:
-        return _split_long_chunks(known_chunks)
-    return _split_long_chunks(_structural_fallback_chunks(pages, doc_id))
+        return known_chunks
+    return _structural_fallback_chunks(pages, doc_id)
+
+
+def chunk_by_section(pages: list[PageText], doc_id: str) -> list[SectionChunk]:
+    return split_long_chunks(chunk_by_section_unsplit(pages, doc_id))

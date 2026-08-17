@@ -12,3 +12,8 @@ chromadb==1.5.9
 pymupdf==1.28.0
 pytesseract==0.3.13
 pillow==12.3.0
+# chunker.py lazy-imports RecursiveCharacterTextSplitter only for sections
+# over MAX_CHUNK_CHARS. No test ever crossed that threshold until
+# test_chunker_unsplit_extraction.py, which exercises the sub-split path
+# on purpose, so CI now needs the splitter installed.
+langchain-text-splitters==1.1.2
