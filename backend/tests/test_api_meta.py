@@ -18,7 +18,7 @@ from app.api.main import app  # noqa: E402
 from app.core.config import Settings, get_settings  # noqa: E402
 from app.db import repository  # noqa: E402
 from app.db.database import init_db  # noqa: E402
-from app.models.evaluation import EvaluationEntry, EvaluatorInfo  # noqa: E402
+from app.models.evaluation import DutyEntry, EvaluationEntry, EvaluatorInfo  # noqa: E402
 
 
 def _entry(year: int) -> EvaluationEntry:
@@ -29,7 +29,7 @@ def _entry(year: int) -> EvaluationEntry:
         score=90,
         ea_type="Ε.Α.",
         unit="Φ/Γ ΣΥΝΘΕΤΙΚΟ",
-        duties=["Κυβερνήτης"],
+        duties=[DutyEntry(label="Κυβερνήτης", days=None)],
         rank_at_time="Πλωτάρχης",
         evaluator=EvaluatorInfo(rank="Πλοίαρχος", name="Ιωάννης Καραγιάννης", role="Διοικητής"),
         gnomatevon=None,

@@ -35,6 +35,7 @@ from app.models.evaluation import (
     FIELD_CODE_LABELS,
     KNOWN_SECTIONS,
     DegreeEntry,
+    DutyEntry,
     EvaluationEntry,
     EvaluatorInfo,
     FieldScore,
@@ -634,7 +635,7 @@ def _parse_evaluation_entry(
     score = int(match.group(2)) if match else None
 
     duties_raw = _field(block, "Καθήκοντα") or ""
-    duties = [d.strip() for d in duties_raw.split(",") if d.strip()]
+    duties = [DutyEntry(label=d.strip(), days=None) for d in duties_raw.split(",") if d.strip()]
 
     defects_raw = _field(block, "Ελαττώματα")
     defects = None if not defects_raw or defects_raw == "Κανένα" else defects_raw
