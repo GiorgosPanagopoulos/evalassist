@@ -59,7 +59,7 @@ def upsert_evaluation(conn: sqlite3.Connection, person_id: str, entry: Evaluatio
             entry.characterization,
             entry.score,
             entry.unit,
-            json.dumps(entry.duties),
+            json.dumps([d.model_dump() for d in entry.duties], ensure_ascii=False),
             entry.rank_at_time,
             entry.evaluator.rank,
             entry.evaluator.name,

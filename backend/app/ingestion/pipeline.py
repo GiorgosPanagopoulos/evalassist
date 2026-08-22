@@ -27,6 +27,7 @@ from app.ingestion.chunker import (
     split_text_if_long,
 )
 from app.ingestion.context_header import add_section_context_header
+from app.ingestion.duties_positional import extract_duties_positional_from_pdf
 from app.ingestion.duty_categories import extract_duty_categories_from_pdf, label_duty_category_rows
 from app.ingestion.embedder import Embedder
 from app.ingestion.extractor import extract_summary_note
@@ -40,7 +41,7 @@ from app.ingestion.subsection_marker import (
     resolve_subsection_carryforward,
 )
 from app.ingestion.vectorstore import CHROMA_DIR, add_chunks, delete_by_doc_id, get_collection
-from app.models.evaluation import CAREER_PERIOD, KNOWN_SECTIONS, SummaryNote
+from app.models.evaluation import CAREER_PERIOD, KNOWN_SECTIONS, DutyEntry, SummaryNote
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,34 @@ class IngestionResult:
     chunk_count: int
     fallback_used: bool
     summary_note: SummaryNote
+
+
+def _attach_duties_positional(
+    evaluations: list,
+    duties_by_key: dict[tuple[int, str], list[tuple[str, int | None]]],
+) -> None:
+    """Post-hoc προσάρτηση των θεσιακά εξαγμένων καθηκόντων (βλ.
+    app.ingestion.duties_positional.extract_duties_positional_from_pdf) στα
+    ήδη κατασκευασμένα EvaluationEntry, με κλειδί (source_page, period) -
+    ΙΔΙΑ σύμβαση με entry.period (models/evaluation.py). Μεταλλάσσει τα
+    entries in-place (EvaluationEntry δεν είναι frozen).
+
+    Το μοντέλο (EvaluationEntry.duties: list[DutyEntry], βλ.
+    models/evaluation.py) κρατάει label ΚΑΙ days - καμία σιωπηλή απώλεια
+    πληροφορίας.
+
+    FAIL-FAST: αν ένα κλειδί του duties_by_key δεν αντιστοιχεί σε ΚΑΝΕΝΑ
+    entry, σκάει με ValueError - ΠΟΤΕ σιωπηλό fallback/best-effort
+    matching."""
+    entries_by_key = {(e.source_page, e.period): e for e in evaluations}
+    for key, duties in duties_by_key.items():
+        entry = entries_by_key.get(key)
+        if entry is None:
+            raise ValueError(
+                f"extract_duties_positional_from_pdf: το κλειδί {key!r} δεν αντιστοιχεί "
+                f"σε κανένα EvaluationEntry - υπάρχοντα κλειδιά: {sorted(entries_by_key)!r}"
+            )
+        entry.duties = [DutyEntry(label=label, days=days) for label, days in duties]
 
 
 def compute_doc_id(pdf_path: Path) -> str:
@@ -91,6 +120,17 @@ def run_ingestion(
     section_chunks = split_long_chunks(unsplit_section_chunks)
     fallback_used = bool(section_chunks) and section_chunks[0].fallback
     summary_note, eval_raw_texts = extract_summary_note(full_text, unsplit_section_chunks)
+
+    # Ανεξάρτητο γεωμετρικό PDF pass (ίδιο pattern με
+    # extract_duty_categories_from_pdf παρακάτω, βλ. duties_positional.py:
+    # ο positional path του extractor δουλεύει πάνω σε plain text, η
+    # γεωμετρία δεν φτάνει ποτέ εκεί). ΠΡΕΠΕΙ να τρέξει ΕΔΩ, πριν τον βρόχο
+    # persistence evaluations παρακάτω - όχι δίπλα στο
+    # extract_duty_categories_from_pdf (πιο κάτω): το repository.upsert_evaluation
+    # μέσα σε αυτόν τον βρόχο κάνει ήδη json.dumps(entry.duties), άρα το
+    # entry.duties πρέπει να είναι γεμάτο ΠΡΙΝ φτάσουμε εκεί.
+    duties_by_key = extract_duties_positional_from_pdf(str(pdf_path))
+    _attach_duties_positional(summary_note.evaluations, duties_by_key)
 
     person_id = summary_note.person.agm
 

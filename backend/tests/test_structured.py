@@ -24,6 +24,7 @@ from app.db import repository  # noqa: E402
 from app.db.database import SCHEMA_PATH, init_db  # noqa: E402
 from app.models.evaluation import (  # noqa: E402
     CAREER_PERIOD,
+    DutyEntry,
     EvaluationEntry,
     EvaluatorInfo,
     FieldScore,
@@ -90,7 +91,7 @@ def _make_entry(period_start: str, score: int, field_scores: list[tuple[str, obj
         score=score,
         ea_type="Ε.Α.",
         unit="Φ/Γ ΣΥΝΘΕΤΙΚΟ",
-        duties=["Κυβερνήτης"],
+        duties=[DutyEntry(label="Κυβερνήτης", days=None)],
         rank_at_time="Πλωτάρχης",
         evaluator=EvaluatorInfo(rank="Πλοίαρχος", name="Ιωάννης Καραγιάννης", role="Διοικητής"),
         gnomatevon=None,

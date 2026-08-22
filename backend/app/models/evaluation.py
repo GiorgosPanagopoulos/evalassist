@@ -128,6 +128,11 @@ class EvaluatorInfo(BaseModel):
     role: Optional[str] = Field(default=None)
 
 
+class DutyEntry(BaseModel):
+    label: str
+    days: Optional[int] = None
+
+
 class EvaluationEntry(BaseModel):
     period_start: datetime.date
     period_end: datetime.date
@@ -137,7 +142,7 @@ class EvaluationEntry(BaseModel):
     score: Optional[int] = Field(default=None, ge=0, le=100)
     ea_type: Literal["Ε.Α.", "Σ.Α."]
     unit: str
-    duties: list[str] = Field(default_factory=list)
+    duties: list[DutyEntry] = Field(default_factory=list)
     rank_at_time: Optional[str] = Field(default=None)
     evaluator: EvaluatorInfo
     gnomatevon: Optional[EvaluatorInfo] = Field(default=None)
