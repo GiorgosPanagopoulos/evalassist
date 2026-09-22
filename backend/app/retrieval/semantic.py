@@ -19,6 +19,7 @@ from app.retrieval.isolation import IsolationScope
 from app.retrieval.llm import OllamaClient
 from app.retrieval.models import Citation, SemanticResult
 from app.retrieval.rank_validator import find_unsupported_ranks
+from app.retrieval.grounding_check import is_grounded
 from app.retrieval.reranker import Reranker
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,8 @@ NO_DATA_ANSWER = (
     "Δεν βρέθηκαν δεδομένα εντός του καθορισμένου πεδίου (person_id/period) "
     "για να απαντηθεί το ερώτημα."
 )
+
+NO_ANSWER_GROUNDED = "Δεν βρέθηκε ρητή αναφορά στα διαθέσιμα αποσπάσματα."
 
 
 class SemanticRetriever:
@@ -101,6 +104,23 @@ class SemanticRetriever:
 
         # Φάση 1 rank validator: ελέγχει το ΙΔΙΟ user_prompt string που πήγε
         # στο LLM ως context. Μόνο logging, δεν αλλάζει την απάντηση.
+        # Grounding check: αν η απάντηση δεν επικαλύπτεται επαρκώς με τα excerpts,
+        # την αντικαθιστούμε με ρητή άρνηση (safety net μετά την αφαίρεση της
+        # refusal instruction από το v4 system prompt).
+        grounding_check_triggered = False
+        if _settings.USE_GROUNDING_CHECK and not is_grounded(
+            answer, user_prompt, min_overlap=_settings.GROUNDING_MIN_OVERLAP
+        ):
+            logger.warning(
+                "Grounding check failed (person_id=%s, prompt_version=%s, doc_ids=%s); "
+                "replacing answer with NO_ANSWER_GROUNDED.",
+                scope.person_id,
+                self.prompt_version,
+                retrieved_doc_ids,
+            )
+            answer = NO_ANSWER_GROUNDED
+            grounding_check_triggered = True
+
         unsupported_ranks = find_unsupported_ranks(answer, user_prompt)
         if unsupported_ranks:
             logger.warning(
@@ -119,4 +139,5 @@ class SemanticRetriever:
             model=self.llm.model_name,
             prompt_version=self.prompt_version,
             unsupported_ranks=unsupported_ranks,
+            grounding_check_triggered=grounding_check_triggered,
         )

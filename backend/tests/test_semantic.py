@@ -17,7 +17,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.retrieval.isolation import IsolationScope  # noqa: E402
-from app.retrieval.semantic import NO_DATA_ANSWER, SemanticRetriever  # noqa: E402
+from app.retrieval.semantic import NO_ANSWER_GROUNDED, NO_DATA_ANSWER, SemanticRetriever  # noqa: E402
+from app.retrieval.grounding_check import is_grounded  # noqa: E402
 
 
 class FakeEmbedder:
@@ -143,6 +144,10 @@ def test_isolation_where_filter_matches_scope():
 
 
 def test_citations_match_reranked_top_k():
+    # Disable grounding check via module-level setting swap;
+    # FakeLLM returns a fixed string unrelated to excerpts.
+    from app.core.config import get_settings
+    get_settings().USE_GROUNDING_CHECK = False
     documents, metadatas = _make_chunks()
     vectorstore = FakeVectorStore(documents, metadatas)
     reranker = FakeReranker()
@@ -202,7 +207,6 @@ def test_system_prompt_contains_tightened_instructions():
     retriever.query("Πώς ήταν η στοχοθεσία;", scope)
 
     assert re.fullmatch(r"v\d+", retriever.prompt_version)
-    assert "Δεν βρέθηκε στα διαθέσιμα αποσπάσματα." in llm.last_system
     assert "ΑΠΟΚΛΕΙΣΤΙΚΑ στο ερώτημα" in llm.last_system
     assert "person_name" in llm.last_system
     assert "ΟΥΔΕΝ ΚΑΤΑΧΩΡΗΜΕΝΟ" in llm.last_system
@@ -334,6 +338,70 @@ def test_career_chunks_included_without_leaking_other_person_or_period():
     assert set(result.retrieved_doc_ids) == {"docA-period", "docA-career"}
 
 
+
+
+def test_grounding_check_accepts_answer_sharing_bigrams_with_excerpts():
+    excerpts = "Ο βαθμός του Σημαιοφόρου δόθηκε ομόφωνα από την επιτροπή αξιολόγησης."
+    answer = "Ο βαθμός του Σημαιοφόρου δόθηκε ομόφωνα από την επιτροπή αξιολόγησης."
+    assert is_grounded(answer, excerpts, min_overlap=2)
+
+
+def test_grounding_check_rejects_answer_without_bigram_overlap():
+    excerpts = "Ο βαθμός του Σημαιοφόρου δόθηκε ομόφωνα από την επιτροπή αξιολόγησης."
+    answer = "Δεν σχετίζεται καθόλου με τα δεδομένα εκείνα."
+    assert not is_grounded(answer, excerpts, min_overlap=2)
+
+
+def test_ungrounded_llm_answer_is_replaced_with_no_answer_grounded():
+    from app.core.config import get_settings
+    get_settings().USE_GROUNDING_CHECK = True
+
+    documents, metadatas = _make_chunks()
+    vectorstore = FakeVectorStore(documents, metadatas)
+    llm = FakeLLM()  # FakeLLM returns fixed "FAKE ANSWER" -> no overlap with excerpts
+    scope = IsolationScope(person_id="p1", period="2025")
+    retriever = SemanticRetriever(
+        embedder=FakeEmbedder(), vectorstore=vectorstore, reranker=FakeReranker(), llm=llm
+    )
+
+    result = retriever.query("Οποιοδήποτε ερώτημα;", scope)
+
+    assert result.answer == NO_ANSWER_GROUNDED
+    assert result.grounding_check_triggered is True
+
+
+def test_grounded_llm_answer_passes_through_untouched():
+    from app.core.config import get_settings
+    get_settings().USE_GROUNDING_CHECK = True
+
+    documents, metadatas = _make_chunks()
+    vectorstore = FakeVectorStore(documents, metadatas)
+
+    # Craft an LLM that echoes text from the first excerpt so overlap is guaranteed
+    class EchoLLM:
+        model_name = "echo-llm"
+        def __init__(self):
+            self.last_system = None
+            self.last_user = None
+            self.calls = 0
+        def generate(self, system, user):
+            self.calls += 1
+            self.last_system = system
+            self.last_user = user
+            return documents[0]  # verbatim -> shares all bigrams with the excerpts block
+
+    llm = EchoLLM()
+    scope = IsolationScope(person_id="p1", period="2025")
+    retriever = SemanticRetriever(
+        embedder=FakeEmbedder(), vectorstore=vectorstore, reranker=FakeReranker(), llm=llm
+    )
+
+    result = retriever.query("Οποιοδήποτε ερώτημα;", scope)
+
+    assert result.answer == documents[0]
+    assert result.grounding_check_triggered is False
+
+
 def run_all():
     tests = [
         test_isolation_where_filter_matches_scope,
@@ -344,6 +412,10 @@ def run_all():
         test_user_prompt_includes_person_name_metadata_when_present,
         test_user_prompt_omits_person_name_when_absent_from_metadata,
         test_career_chunks_included_without_leaking_other_person_or_period,
+        test_grounding_check_accepts_answer_sharing_bigrams_with_excerpts,
+        test_grounding_check_rejects_answer_without_bigram_overlap,
+        test_ungrounded_llm_answer_is_replaced_with_no_answer_grounded,
+        test_grounded_llm_answer_passes_through_untouched,
     ]
     for test in tests:
         test()

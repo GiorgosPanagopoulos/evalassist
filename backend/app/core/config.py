@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     OLLAMA_TIMEOUT_S: int = 120
     OLLAMA_TEMPERATURE: float = 0.0
     OLLAMA_SEED: int = 42
+    USE_GROUNDING_CHECK: bool = True
+    GROUNDING_MIN_OVERLAP: int = 2
     TOP_K_RETRIEVE: int = 20
     TOP_K_RERANK: int = 5
     ALLOWED_ORIGINS: list[str] = ["http://localhost:5173"]

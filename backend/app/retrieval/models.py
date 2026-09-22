@@ -43,3 +43,6 @@ class SemanticResult(BaseModel):
     # Φάση 1 rank validator (μόνο logging): βαθμοί στην απάντηση χωρίς
     # κανένα variant τους στο context που πήγε στο LLM.
     unsupported_ranks: list[str] = Field(default_factory=list)
+    # Grounding check: True αν η απάντηση αντικαταστάθηκε από
+    # NO_ANSWER_GROUNDED επειδή δεν πέρασε το bigram overlap check.
+    grounding_check_triggered: bool = False
