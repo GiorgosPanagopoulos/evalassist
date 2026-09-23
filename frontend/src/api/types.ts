@@ -31,6 +31,14 @@ export interface Citation {
   score: number
 }
 
+// Το ολιστικό πεδίο (field_code 141) που το top_bottom_sections επιστρέφει στο
+// `data.overall`, χωριστά από την κατάταξη. `null` = δεν υπάρχει στην περίοδο.
+export interface OverallFieldScore {
+  field_code: string
+  description: string
+  value: number
+}
+
 export interface StructuredResult {
   mode: 'structured'
   data: Record<string, unknown>

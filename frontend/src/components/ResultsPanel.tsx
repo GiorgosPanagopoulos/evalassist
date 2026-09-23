@@ -1,4 +1,4 @@
-import type { SemanticResult, StructuredResult } from '../api/types'
+import type { OverallFieldScore, SemanticResult, StructuredResult } from '../api/types'
 import { SemanticAnswer } from './SemanticAnswer'
 import { EmptyState } from './EmptyState'
 
@@ -104,6 +104,36 @@ function TopBottomTable({ items, title }: { items: TopBottomItem[]; title: strin
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+function toOverallFieldScore(item: Record<string, unknown>): OverallFieldScore {
+  return {
+    field_code: String(item.field_code ?? ''),
+    description: String(item.description ?? ''),
+    value: Number(item.value ?? 0),
+  }
+}
+
+// Ξεχωριστά από τα top/bottom: είναι η συνολική ολιστική κρίση του αξιολογητή,
+// όχι πεδίο επίδοσης, οπότε δεν συγκρίνεται με τα υπόλοιπα.
+function OverallField({ overall }: { overall: OverallFieldScore }) {
+  return (
+    <div
+      className="flex flex-col gap-1 rounded border p-3"
+      style={{ borderColor: '#26262d' }}
+    >
+      <h3 className="text-sm font-semibold" style={{ color: '#f2f2f4' }}>
+        Συνολική κρίση (εκτός κατάταξης)
+      </h3>
+      <div className="flex items-baseline justify-between gap-2 text-sm">
+        <span>{overall.description || overall.field_code}</span>
+        <span className="font-mono">{overall.value}</span>
+      </div>
+      <p className="text-xs" style={{ color: '#8b8b95' }}>
+        Ολιστική κρίση του αξιολογητή - δεν είναι συγκρίσιμη με τα επιμέρους πεδία.
+      </p>
     </div>
   )
 }
@@ -227,6 +257,10 @@ function StructuredView({ result, auditId }: { result: StructuredResult; auditId
           <SectionsTable sections={data.sections_a as Section[]} title={String(data.period_a ?? 'Περίοδος Α')} />
           <SectionsTable sections={data.sections_b as Section[]} title={String(data.period_b ?? 'Περίοδος Β')} />
         </div>
+      )}
+
+      {data.overall != null && typeof data.overall === 'object' && (
+        <OverallField overall={toOverallFieldScore(data.overall as Record<string, unknown>)} />
       )}
 
       {Array.isArray(data.top) && Array.isArray(data.bottom) && (

@@ -5,7 +5,8 @@
   - get_scores: lookup evaluation entry ανά person_id/period + field_scores +
     sources/retrieved_doc_ids.
   - compare_periods: σύγκριση δύο περιόδων του ίδιου ατόμου.
-  - top_bottom_sections: top/bottom N αναλυτικά πεδία (field_scores) βάσει τιμής.
+  - top_bottom_sections: top/bottom N αναλυτικά πεδία (field_scores) βάσει τιμής,
+    με το ολιστικό πεδίο 141 εκτός κατάταξης και ξεχωριστά ως `overall`.
   - άδειο αποτέλεσμα -> valid StructuredResult με άδειο data, όχι exception.
 
 Εκτελείται standalone: `python tests/test_structured.py`
@@ -31,6 +32,7 @@ from app.models.evaluation import (  # noqa: E402
 )
 from app.retrieval.isolation import IsolationScope  # noqa: E402
 from app.retrieval.structured import (  # noqa: E402
+    OVERALL_FIELD_CODE,
     compare_periods,
     get_promotions_table,
     get_scores,
@@ -159,6 +161,9 @@ def test_compare_periods():
 
 
 def test_top_bottom_sections_ranks_numeric_field_scores():
+    """Το προηγούμενο assertion ήταν `top_codes == ["141", "93"]`, δηλαδή
+    κωδικοποιούσε το bug: το 141 κατατασσόταν σαν πεδίο επίδοσης. Τώρα βγαίνει
+    από την κατάταξη και ελέγχεται χωριστά στα tests του `overall` παρακάτω."""
     conn = _make_conn()
     entry = _make_entry(
         "2025-01-01",
@@ -171,11 +176,76 @@ def test_top_bottom_sections_ranks_numeric_field_scores():
 
     top_codes = [fs["field_code"] for fs in result.data["top"]]
     bottom_codes = [fs["field_code"] for fs in result.data["bottom"]]
-    assert top_codes == ["141", "93"]
+    assert top_codes == ["93", "91"]
     assert bottom_codes == ["91", "93"]
     # τα ΝΑΙ/ΟΧΙ πεδία δεν είναι αριθμητικά -> δεν κατατάσσονται
     assert "142α" not in top_codes + bottom_codes
     assert "142β" not in top_codes + bottom_codes
+
+
+def test_top_bottom_sections_overall_field_is_returned_separately():
+    """POSITIVE: όταν υπάρχει το 141, επιστρέφεται στο `overall` και ΔΕΝ
+    εμφανίζεται ούτε στα top ούτε στα bottom."""
+    conn = _make_conn()
+    entry = _make_entry(
+        "2025-01-01",
+        96,
+        [("141", 96), ("91", 95), ("93", 92), ("97", 90), ("142α", "ΝΑΙ")],
+    )
+    _seed_person(conn, "p1", entry, "doc1")
+
+    result = top_bottom_sections(conn, IsolationScope(person_id="p1", period=entry.period), n=3)
+
+    overall = result.data["overall"]
+    assert overall is not None
+    assert overall["field_code"] == OVERALL_FIELD_CODE
+    assert overall["value"] == 96
+    # ίδιο shape με τα στοιχεία των top/bottom
+    assert set(overall) == set(result.data["top"][0])
+
+    ranked_codes = [fs["field_code"] for fs in result.data["top"] + result.data["bottom"]]
+    assert OVERALL_FIELD_CODE not in ranked_codes
+    assert [fs["field_code"] for fs in result.data["top"]] == ["91", "93", "97"]
+    assert [fs["field_code"] for fs in result.data["bottom"]] == ["97", "93", "91"]
+
+
+def test_top_bottom_sections_overall_is_none_when_field_absent():
+    """NEGATIVE: χωρίς 141 το `overall` είναι None -- «δεν υπάρχει στην πηγή»,
+    όχι κενό dict -- και η κατάταξη δουλεύει κανονικά με τα υπόλοιπα."""
+    conn = _make_conn()
+    entry = _make_entry(
+        "2025-01-01",
+        90,
+        [("91", 95), ("93", 92), ("97", 90), ("142α", "ΝΑΙ")],
+    )
+    _seed_person(conn, "p1", entry, "doc1")
+
+    result = top_bottom_sections(conn, IsolationScope(person_id="p1", period=entry.period), n=2)
+
+    assert result.data["overall"] is None
+    assert [fs["field_code"] for fs in result.data["top"]] == ["91", "93"]
+    assert [fs["field_code"] for fs in result.data["bottom"]] == ["97", "93"]
+
+
+def test_top_bottom_sections_low_overall_does_not_fall_into_bottom():
+    """REGRESSION -- αυτό ακριβώς ήταν το bug: το 141 είναι ολιστική κρίση, όχι
+    πεδίο επίδοσης, αλλά με χαμηλή τιμή κατατασσόταν σαν αδύναμο πεδίο. Εδώ το
+    141 έχει τη ΧΑΜΗΛΟΤΕΡΗ τιμή όλων -- πρέπει να μείνει εκτός bottom."""
+    conn = _make_conn()
+    entry = _make_entry(
+        "2025-01-01",
+        70,
+        [("141", 70), ("91", 95), ("93", 92), ("97", 90), ("96", 88)],
+    )
+    _seed_person(conn, "p1", entry, "doc1")
+
+    result = top_bottom_sections(conn, IsolationScope(person_id="p1", period=entry.period), n=3)
+
+    bottom_codes = [fs["field_code"] for fs in result.data["bottom"]]
+    assert OVERALL_FIELD_CODE not in bottom_codes
+    assert bottom_codes == ["96", "97", "93"]
+    # δεν κρύβεται -- απλώς δεν είναι συγκρίσιμο
+    assert result.data["overall"]["value"] == 70
 
 
 def test_get_promotions_table_judged_for_chain():
@@ -291,6 +361,9 @@ def run_all():
         test_get_scores_empty_result_is_not_an_exception,
         test_compare_periods,
         test_top_bottom_sections_ranks_numeric_field_scores,
+        test_top_bottom_sections_overall_field_is_returned_separately,
+        test_top_bottom_sections_overall_is_none_when_field_absent,
+        test_top_bottom_sections_low_overall_does_not_fall_into_bottom,
         test_get_promotions_table_judged_for_chain,
         test_get_promotions_table_empty_result_is_not_an_exception,
         test_get_promotions_table_isolation_scope_no_cross_person_leak,
