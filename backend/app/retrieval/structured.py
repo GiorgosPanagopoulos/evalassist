@@ -18,6 +18,13 @@ _EVALUATION_SECTION = KNOWN_SECTIONS[-1]  # "ΣΥΝΟΛΙΚΗ ΕΜΦΑΝΙΣΗ -
 _PROMOTIONS_SECTION = KNOWN_SECTIONS[0]  # "ΚΡΙΣΕΙΣ ΠΡΟΑΓΩΓΩΝ"
 _SERVICE_TIME_SECTION = KNOWN_SECTIONS[1]  # "ΣΥΝΟΛΙΚΟΣ ΧΡΟΝΟΣ ΥΠΗΡΕΣΙΑΣ"
 
+# Ολιστική κρίση του αξιολογητή για τον βαθμό, όχι πεδίο επίδοσης — δεν είναι
+# συγκρίσιμο με τα υπόλοιπα field_scores, άρα δεν κατατάσσεται μαζί τους.
+# Τα 142α/142β είναι επίσης ολιστικά και αποκλείονται σήμερα μόνο επειδή είναι
+# ΝΑΙ/ΟΧΙ· αν γίνουν ποτέ αριθμητικά θα μπουν σιωπηλά στην κατάταξη και η
+# σταθερά θα πρέπει να γίνει σύνολο.
+OVERALL_FIELD_CODE = "141"
+
 
 def _doc_ids_in_scope(conn: sqlite3.Connection, scope: IsolationScope) -> list[str]:
     where, params = scope.build_sql_where()
@@ -103,10 +110,25 @@ def top_bottom_sections(
     conn: sqlite3.Connection, scope: IsolationScope, n: int = 3
 ) -> StructuredResult:
     """Top/bottom N αναλυτικά πεδία (field_scores) βάσει αριθμητικής τιμής —
-    τα ΝΑΙ/ΟΧΙ πεδία δεν κατατάσσονται (δεν είναι αριθμητικά)."""
+    τα ΝΑΙ/ΟΧΙ πεδία δεν κατατάσσονται (δεν είναι αριθμητικά).
+
+    Το OVERALL_FIELD_CODE εξαιρείται από την κατάταξη επειδή δεν είναι πεδίο
+    επίδοσης αλλά η συνολική ολιστική κρίση του αξιολογητή: δεν είναι
+    συγκρίσιμο με τα επιμέρους πεδία, οπότε αν καταταγεί μαζί τους μπορεί να
+    φανεί ψευδώς ως αδύναμο πεδίο. Επιστρέφεται ξεχωριστά ως `overall` —
+    δεν κρύβεται, είναι σημαντική πληροφορία. `overall` είναι `None` όταν το
+    πεδίο δεν υπάρχει στη συγκεκριμένη περίοδο.
+    """
     result = get_scores(conn, scope)
     field_scores = result.data.get("field_scores", [])
-    numeric = [fs for fs in field_scores if isinstance(fs["value"], int)]
+    overall = next(
+        (fs for fs in field_scores if fs["field_code"] == OVERALL_FIELD_CODE), None
+    )
+    numeric = [
+        fs
+        for fs in field_scores
+        if isinstance(fs["value"], int) and fs["field_code"] != OVERALL_FIELD_CODE
+    ]
     ranked = sorted(numeric, key=lambda fs: fs["value"], reverse=True)
 
     data = {
@@ -114,6 +136,7 @@ def top_bottom_sections(
         "period": scope.period,
         "top": ranked[:n],
         "bottom": list(reversed(ranked[-n:])) if ranked else [],
+        "overall": overall,
     }
     return StructuredResult(
         data=data, sources=result.sources, retrieved_doc_ids=result.retrieved_doc_ids

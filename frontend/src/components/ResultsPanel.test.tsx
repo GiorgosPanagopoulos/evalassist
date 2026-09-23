@@ -132,6 +132,55 @@ describe('ResultsPanel', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('renders the overall field separately from the top/bottom tables', () => {
+    const result: StructuredResult = {
+      mode: 'structured',
+      data: {
+        person_id: 'p1',
+        period: '2012-09-14..2012-12-31',
+        top: [{ field_code: '91', description: 'ΕΠΑΓΓΕΛΜΑΤΙΚΗ ΚΑΤΑΡΤΙΣΗ', value: 94 }],
+        bottom: [{ field_code: '97', description: 'ΕΠΙΤΕΛΙΚΗ ΙΚΑΝΟΤΗΤΑ', value: 90 }],
+        overall: {
+          field_code: '141',
+          description: 'ΓΕΝΙΚΗ ΙΚΑΝΟΤΗΤΑ ΓΙΑ ΤΟΝ KATEXOMENO ΒΑΘΜΟ',
+          value: 93,
+        },
+      },
+      sources: [],
+      retrieved_doc_ids: ['doc-1'],
+    }
+
+    render(<ResultsPanel result={result} auditId={11} />)
+
+    expect(screen.getByText('Συνολική κρίση (εκτός κατάταξης)')).toBeInTheDocument()
+    expect(screen.getByText('ΓΕΝΙΚΗ ΙΚΑΝΟΤΗΤΑ ΓΙΑ ΤΟΝ KATEXOMENO ΒΑΘΜΟ')).toBeInTheDocument()
+    expect(screen.getByText('93')).toBeInTheDocument()
+    // παραμένει έξω από τις δύο κατατάξεις
+    expect(screen.getByText('Κορυφαίες ενότητες')).toBeInTheDocument()
+    expect(screen.getByText('Χαμηλότερες ενότητες')).toBeInTheDocument()
+  })
+
+  it('renders nothing for the overall field when it is null', () => {
+    const result: StructuredResult = {
+      mode: 'structured',
+      data: {
+        person_id: 'p1',
+        period: '2025-01-01..2025-12-31',
+        top: [{ field_code: '91', description: 'ΕΠΑΓΓΕΛΜΑΤΙΚΗ ΚΑΤΑΡΤΙΣΗ', value: 94 }],
+        bottom: [{ field_code: '97', description: 'ΕΠΙΤΕΛΙΚΗ ΙΚΑΝΟΤΗΤΑ', value: 90 }],
+        overall: null,
+      },
+      sources: [],
+      retrieved_doc_ids: ['doc-1'],
+    }
+
+    render(<ResultsPanel result={result} auditId={12} />)
+
+    // απουσία, όχι μήνυμα "δεν υπάρχει"
+    expect(screen.queryByText('Συνολική κρίση (εκτός κατάταξης)')).not.toBeInTheDocument()
+    expect(screen.getByText('Κορυφαίες ενότητες')).toBeInTheDocument()
+  })
+
   it('shows a placeholder when there is no result yet', () => {
     render(<ResultsPanel result={null} auditId={null} />)
 
