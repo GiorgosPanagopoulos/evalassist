@@ -15,6 +15,8 @@ class OllamaClient:
         timeout: int | None = None,
         temperature: float | None = None,
         seed: int | None = None,
+        num_ctx: int | None = None,
+        keep_alive: str | None = None,
     ):
         settings = get_settings()
         self.model_name = model_name if model_name is not None else settings.OLLAMA_MODEL
@@ -24,6 +26,10 @@ class OllamaClient:
             temperature if temperature is not None else settings.OLLAMA_TEMPERATURE
         )
         self.seed = seed if seed is not None else settings.OLLAMA_SEED
+        self.num_ctx = num_ctx if num_ctx is not None else settings.OLLAMA_NUM_CTX
+        self.keep_alive = (
+            keep_alive if keep_alive is not None else settings.OLLAMA_KEEP_ALIVE
+        )
 
     def generate(self, system: str, user: str) -> str:
         response = requests.post(
@@ -35,9 +41,13 @@ class OllamaClient:
                     {"role": "user", "content": user},
                 ],
                 "stream": False,
+                # keep_alive είναι top-level πεδίο του Ollama API, ΟΧΙ option.
+                # Μέσα στο options το αγνοεί σιωπηλά.
+                "keep_alive": self.keep_alive,
                 "options": {
                     "temperature": self.temperature,
                     "seed": self.seed,
+                    "num_ctx": self.num_ctx,
                 },
             },
             timeout=self.timeout,
