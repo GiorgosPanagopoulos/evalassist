@@ -19,6 +19,32 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.retrieval.isolation import IsolationScope  # noqa: E402
 from app.retrieval.semantic import NO_DATA_ANSWER, SemanticRetriever  # noqa: E402
 
+# Οι δύο κανόνες που πρόσθετε το v3 πάνω στο v2 και αποσύρθηκαν. Σταθερά
+# strings: ο πρώτος είναι ο δείκτης του ingestion (form_markers._MARKER), ο
+# δεύτερος ο πυρήνας του κανόνα περιόδου.
+V3_REFUSAL_RULE_MARKERS = (
+    "ΟΥΔΕΝ ΚΑΤΑΧΩΡΗΜΕΝΟ",
+    "ΔΙΑΦΟΡΕΤΙΚΗ χρονική περίοδο",
+)
+
+# Κανόνες του v2 που πρέπει να επιβιώνουν σε κάθε ενεργή έκδοση του prompt.
+CORE_PROMPT_RULES = (
+    "Δεν βρέθηκε στα διαθέσιμα αποσπάσματα.",
+    "ΑΠΟΚΛΕΙΣΤΙΚΑ στο ερώτημα",
+    "person_name",
+    "Μην επινοείς ποτέ βαθμολογίες",
+    "Απάντα στα Ελληνικά.",
+)
+
+V3_PROMPT_PATH = (
+    Path(__file__).resolve().parents[1] / "app" / "prompts" / "semantic_rag" / "v3.txt"
+)
+
+
+def _v3_rule_markers_in(text: str) -> list[str]:
+    """Επιστρέφει τους δείκτες των v3 κανόνων που εντοπίστηκαν στο `text`."""
+    return [marker for marker in V3_REFUSAL_RULE_MARKERS if marker in text]
+
 
 class FakeEmbedder:
     def embed(self, texts: list[str]) -> list[list[float]]:
@@ -186,11 +212,9 @@ def test_empty_scope_skips_llm_call():
     assert vectorstore.last_where == scope.build_chroma_where()
 
 
-def test_system_prompt_contains_tightened_instructions():
-    """Φάση B1: το ενεργό system prompt πρέπει να περιέχει τις οδηγίες
-    σφιξίματος — απάντηση μόνο στο ζητούμενο, ρητή δήλωση όταν λείπει από τα
-    αποσπάσματα, ονόματα/βαθμοί μόνο αυτούσια από αποσπάσματα ή person_name.
-    Ο έλεγχος δεν δεσμεύεται σε συγκεκριμένο αριθμό έκδοσης του prompt."""
+def _captured_system_prompt() -> str:
+    """Τρέχει το pipeline με fakes και επιστρέφει το system prompt που έφτασε
+    στο LLM — δηλαδή το κείμενο της ενεργής έκδοσης του prompt, όχι mock."""
     documents, metadatas = _make_chunks()
     vectorstore = FakeVectorStore(documents, metadatas)
     llm = FakeLLM()
@@ -202,11 +226,40 @@ def test_system_prompt_contains_tightened_instructions():
     retriever.query("Πώς ήταν η στοχοθεσία;", scope)
 
     assert re.fullmatch(r"v\d+", retriever.prompt_version)
-    assert "Δεν βρέθηκε στα διαθέσιμα αποσπάσματα." in llm.last_system
-    assert "ΑΠΟΚΛΕΙΣΤΙΚΑ στο ερώτημα" in llm.last_system
-    assert "person_name" in llm.last_system
-    assert "ΟΥΔΕΝ ΚΑΤΑΧΩΡΗΜΕΝΟ" in llm.last_system
-    assert "ΔΙΑΦΟΡΕΤΙΚΗ" in llm.last_system
+    return llm.last_system
+
+
+def test_system_prompt_has_no_v3_refusal_rules():
+    """Regression guard (B09_ROOT_CAUSE.md): οι δύο κανόνες του v3 προκαλούσαν
+    ΨΕΥΔΕΙΣ ΑΡΝΗΣΕΙΣ — το σύστημα απαντούσε «Δεν βρέθηκε» ενώ το σωστό chunk
+    ΕΙΧΕ ανακτηθεί και περιείχε την απάντηση αυτολεξεί. Δεν ξαναμπαίνουν."""
+    system = _captured_system_prompt()
+
+    found = _v3_rule_markers_in(system)
+    assert found == [], f"Οι κανόνες του v3 επανήλθαν στο ενεργό prompt: {found}"
+
+
+def test_system_prompt_keeps_core_rules():
+    """Το ενεργό prompt εξακολουθεί να περιέχει τους κανόνες του v2 που πρέπει
+    να μείνουν: απάντηση μόνο στο ζητούμενο, ρητή δήλωση όταν λείπει από τα
+    αποσπάσματα, ονόματα μόνο αυτούσια ή από person_name, καμία επινόηση."""
+    system = _captured_system_prompt()
+
+    for rule in CORE_PROMPT_RULES:
+        assert rule in system, f"Λείπει κανόνας του v2 από το ενεργό prompt: {rule!r}"
+
+
+def test_v3_rules_would_be_caught():
+    """Αποδεικνύει ότι ο έλεγχος του guard όντως πυροδοτεί: το πραγματικό
+    v3.txt πρέπει να ενεργοποιεί ΚΑΙ ΤΟΥΣ ΔΥΟ δείκτες."""
+    assert V3_PROMPT_PATH.is_file(), (
+        f"Λείπει το {V3_PROMPT_PATH} — το guard δεν μπορεί να επαληθευτεί. "
+        "Το v3.txt μένει στο repo ως ιστορικό ακριβώς γι' αυτόν τον έλεγχο."
+    )
+
+    v3_text = V3_PROMPT_PATH.read_text(encoding="utf-8")
+
+    assert _v3_rule_markers_in(v3_text) == list(V3_REFUSAL_RULE_MARKERS)
 
 
 def test_user_prompt_includes_person_name_metadata_when_present():
@@ -340,7 +393,9 @@ def run_all():
         test_citations_match_reranked_top_k,
         test_empty_scope_skips_llm_call,
         test_rank_validator_flags_unsupported_rank_in_real_pipeline,
-        test_system_prompt_contains_tightened_instructions,
+        test_system_prompt_has_no_v3_refusal_rules,
+        test_system_prompt_keeps_core_rules,
+        test_v3_rules_would_be_caught,
         test_user_prompt_includes_person_name_metadata_when_present,
         test_user_prompt_omits_person_name_when_absent_from_metadata,
         test_career_chunks_included_without_leaking_other_person_or_period,
