@@ -29,6 +29,8 @@ def test_defaults_match_previous_hardcoded_values():
     assert settings.OLLAMA_TIMEOUT_S == 120
     assert settings.OLLAMA_TEMPERATURE == 0.0
     assert settings.OLLAMA_SEED == 42
+    assert settings.OLLAMA_NUM_CTX == 8192
+    assert settings.OLLAMA_KEEP_ALIVE == "30m"
     assert settings.TOP_K_RETRIEVE == 20
     assert settings.TOP_K_RERANK == 5
     assert settings.ALLOWED_ORIGINS == ["http://localhost:5173"]
@@ -63,13 +65,19 @@ def test_resolved_gen_model_falls_back_to_ollama_model():
 def test_deterministic_generation_env_override():
     os.environ["OLLAMA_TEMPERATURE"] = "0.7"
     os.environ["OLLAMA_SEED"] = "1337"
+    os.environ["OLLAMA_NUM_CTX"] = "4096"
+    os.environ["OLLAMA_KEEP_ALIVE"] = "1h"
     try:
         settings = Settings(_env_file=None)
         assert settings.OLLAMA_TEMPERATURE == 0.7
         assert settings.OLLAMA_SEED == 1337
+        assert settings.OLLAMA_NUM_CTX == 4096
+        assert settings.OLLAMA_KEEP_ALIVE == "1h"
     finally:
         del os.environ["OLLAMA_TEMPERATURE"]
         del os.environ["OLLAMA_SEED"]
+        del os.environ["OLLAMA_NUM_CTX"]
+        del os.environ["OLLAMA_KEEP_ALIVE"]
 
 
 def run_all():
