@@ -43,3 +43,6 @@ class SemanticResult(BaseModel):
     # Φάση 1 rank validator (μόνο logging): βαθμοί στην απάντηση χωρίς
     # κανένα variant τους στο context που πήγε στο LLM.
     unsupported_ranks: list[str] = Field(default_factory=list)
+    # Λόγος άρνησης του precheck (app.retrieval.precheck.RefusalReason) όταν το
+    # ερώτημα απορρίφθηκε πριν το retrieval· None για κανονική απάντηση.
+    refusal_reason: str | None = None
