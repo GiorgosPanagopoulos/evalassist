@@ -53,6 +53,9 @@ export interface SemanticResult {
   retrieved_doc_ids: string[]
   model: string
   routing_hint: string | null
+  // Precheck refusal code (app.retrieval.precheck.RefusalReason).
+  // string, not a union: an unknown code must not break the type.
+  refusal_reason?: string | null
 }
 
 export interface StructuredQueryResponse {

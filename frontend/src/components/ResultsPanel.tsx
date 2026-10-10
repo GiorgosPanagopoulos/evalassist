@@ -309,6 +309,7 @@ export function ResultsPanel({ result, auditId }: ResultsPanelProps) {
           citations={result.citations}
           auditId={auditId}
           routingHint={result.routing_hint}
+          refusalReason={result.refusal_reason}
         />
       ) : (
         <StructuredView result={result} auditId={auditId} />
