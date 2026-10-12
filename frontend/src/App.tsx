@@ -4,12 +4,13 @@ import type { SemanticResult, StructuredResult } from './api/types'
 import { QueryForm } from './components/QueryForm'
 import { ResultsPanel } from './components/ResultsPanel'
 import { HealthIndicator } from './components/HealthIndicator'
+import { TimelinePanel } from './components/TimelinePanel'
 
 const api = new ApiClient()
 
 function MainEmptyState() {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3.5 text-center">
+    <div className="flex h-full flex-1 flex-col items-center justify-center gap-3.5 text-center">
       <p className="text-[13px]" style={{ color: '#6d6d78' }}>
         Υποβάλετε ένα ερώτημα για να δείτε αποτελέσματα
       </p>
@@ -83,7 +84,10 @@ function App() {
           <HealthIndicator api={api} />
         </header>
 
-        <div className="relative z-10 flex-1">
+        <div className="relative z-10 flex flex-1 flex-col overflow-y-auto">
+          <div className="mx-auto w-full max-w-[1100px]" style={{ padding: '24px 24px 0' }}>
+            <TimelinePanel api={api} />
+          </div>
           {result === null ? <MainEmptyState /> : (
             <div className="mx-auto w-full max-w-[1100px]" style={{ padding: '24px' }}>
               <ResultsPanel result={result} auditId={auditId} />

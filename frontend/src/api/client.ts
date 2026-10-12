@@ -5,6 +5,7 @@ import type {
   SemanticQueryResponse,
   StructuredQueryRequest,
   StructuredQueryResponse,
+  TimelineResponse,
 } from './types'
 
 export class ApiError extends Error {
@@ -78,6 +79,10 @@ export class ApiClient {
       method: 'POST',
       body: JSON.stringify(req),
     })
+  }
+
+  getTimeline(personId: string): Promise<TimelineResponse> {
+    return this.request<TimelineResponse>(`/person/${encodeURIComponent(personId)}/timeline`)
   }
 
   getHealth(): Promise<HealthResponse> {

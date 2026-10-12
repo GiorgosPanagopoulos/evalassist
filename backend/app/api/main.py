@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import routes_meta, routes_query
+from app.api import routes_meta, routes_query, routes_timeline
 from app.core.config import get_settings
 from app.core.exceptions import IsolationError, LLMUnavailableError, NotFoundError
 
@@ -26,6 +26,7 @@ def create_app() -> FastAPI:
 
     app.include_router(routes_query.router, prefix="/query", tags=["query"])
     app.include_router(routes_meta.router, tags=["meta"])
+    app.include_router(routes_timeline.router, tags=["timeline"])
 
     @app.exception_handler(NotFoundError)
     async def _not_found_handler(request: Request, exc: NotFoundError) -> JSONResponse:
