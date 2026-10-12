@@ -12,11 +12,42 @@ interface SemanticAnswerProps {
   citations: Citation[]
   auditId: number
   routingHint?: string | null
+  // Precheck refusal code. The refusal text is the server's `answer`,
+  // rendered verbatim; no code-to-text mapping here.
+  refusalReason?: string | null
 }
 
-export function SemanticAnswer({ answer, citations, auditId, routingHint }: SemanticAnswerProps) {
+export function SemanticAnswer({ answer, citations, auditId, routingHint, refusalReason }: SemanticAnswerProps) {
   const isEmptyScope = citations.length === 0
   const [hintDismissed, setHintDismissed] = useState(false)
+
+  if (refusalReason) {
+    return (
+      <div className="flex flex-col gap-3">
+        <ReviewBanner />
+
+        <div
+          data-testid="refusal"
+          className="flex flex-col gap-2 rounded border px-3 py-3 text-sm"
+          style={{ borderColor: '#26262d' }}
+        >
+          <p className="font-semibold" style={{ color: '#f2f2f4' }}>
+            Το ερώτημα δεν εκτελέστηκε
+          </p>
+          <p className="leading-relaxed" style={{ color: '#f2f2f4' }}>
+            {answer}
+          </p>
+          <p className="font-mono text-xs" style={{ color: '#8b8b95' }}>
+            Αιτία: {refusalReason}
+          </p>
+        </div>
+
+        <p className="font-mono text-xs" style={{ color: '#8b8b95' }}>
+          Καταχώρηση ελέγχου: #{auditId}
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-3">

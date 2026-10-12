@@ -13,6 +13,10 @@ class IsolationError(Exception):
     """Παραβίαση ή αδυναμία επιβολής του isolation scope σε ένα query."""
 
 
+class InvalidPeriodError(Exception):
+    """Το request.period δεν υπάρχει για το person_id (λάθος αιτήματος, όχι ερώτημα)."""
+
+
 class LLMUnavailableError(Exception):
     """Το τοπικό LLM (Ollama) δεν είναι διαθέσιμο ή επέστρεψε σφάλμα."""
 

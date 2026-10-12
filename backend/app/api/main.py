@@ -9,7 +9,12 @@ from fastapi.responses import JSONResponse
 
 from app.api import routes_meta, routes_query, routes_timeline
 from app.core.config import get_settings
-from app.core.exceptions import IsolationError, LLMUnavailableError, NotFoundError
+from app.core.exceptions import (
+    InvalidPeriodError,
+    IsolationError,
+    LLMUnavailableError,
+    NotFoundError,
+)
 
 
 def create_app() -> FastAPI:
@@ -35,6 +40,10 @@ def create_app() -> FastAPI:
     @app.exception_handler(IsolationError)
     async def _isolation_handler(request: Request, exc: IsolationError) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+    @app.exception_handler(InvalidPeriodError)
+    async def _invalid_period_handler(request: Request, exc: InvalidPeriodError) -> JSONResponse:
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
 
     @app.exception_handler(LLMUnavailableError)
     async def _llm_unavailable_handler(request: Request, exc: LLMUnavailableError) -> JSONResponse:

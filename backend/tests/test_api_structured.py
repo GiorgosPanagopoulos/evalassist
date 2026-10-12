@@ -7,6 +7,8 @@ persons x 1 evaluation period seeded):
   - τα δεδομένα άλλου person δεν διαρρέουν ποτέ στην απάντηση.
   - γράφεται ακριβώς μία γραμμή audit_log με mode="structured".
   - μη έγκυρος συνδυασμός operation/πεδίων -> 422.
+  - ανύπαρκτη περίοδος (ή περίοδος άλλου ατόμου) -> 422 με audit, για τα
+    period-scoped operations· τα career-wide την αγνοούν.
 
 Εκτελείται standalone: `python tests/test_api_structured.py`
 """
@@ -302,6 +304,55 @@ def test_promotions_table_operation_rejects_other_period():
         os.remove(db_path)
 
 
+def test_unknown_period_is_422_with_audit_for_period_scoped_operations():
+    db_path = _make_temp_db()
+    try:
+        _override_settings(db_path)
+        client = TestClient(app)
+        bogus = "2030-01-01..2030-12-31"
+        payloads = [
+            {"person_id": "p1", "period": bogus, "operation": "get_scores"},
+            {"person_id": "p1", "period": bogus, "operation": "top_bottom_sections", "n": 1},
+            {"person_id": "p1", "period": bogus, "operation": "compare_periods", "other_period": PERIOD},
+            {"person_id": "p1", "period": PERIOD, "operation": "compare_periods", "other_period": bogus},
+            # περίοδος που υπάρχει, αλλά όχι για αυτό το άτομο
+            {"person_id": "ghost", "period": PERIOD, "operation": "get_scores"},
+        ]
+        for payload in payloads:
+            response = client.post("/query/structured", json=payload)
+            assert response.status_code == 422, payload
+            assert "δεν υπάρχει στον φάκελο" in response.json()["detail"], payload
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT * FROM audit_log ORDER BY id").fetchall()
+        conn.close()
+        assert len(rows) == len(payloads)
+        for row in rows:
+            assert row["mode"] == "structured"
+            assert json.loads(row["retrieved_doc_ids"]) == []
+            assert row["answer_text"] is None
+    finally:
+        _clear_overrides()
+        os.remove(db_path)
+
+
+def test_career_wide_operations_ignore_period_validation():
+    db_path = _make_temp_db()
+    try:
+        _override_settings(db_path)
+        client = TestClient(app)
+        for operation in ("get_promotions_table", "get_service_time_table"):
+            response = client.post(
+                "/query/structured",
+                json={"person_id": "p1", "period": "2030-01-01..2030-12-31", "operation": operation},
+            )
+            assert response.status_code == 200, operation
+    finally:
+        _clear_overrides()
+        os.remove(db_path)
+
+
 def run_all():
     tests = [
         test_get_scores_scoped_to_person_and_period,
@@ -313,6 +364,8 @@ def run_all():
         test_get_promotions_table_writes_audit_row,
         test_get_service_time_table_empty_result_is_200_not_error,
         test_promotions_table_operation_rejects_other_period,
+        test_unknown_period_is_422_with_audit_for_period_scoped_operations,
+        test_career_wide_operations_ignore_period_validation,
     ]
     for test in tests:
         test()

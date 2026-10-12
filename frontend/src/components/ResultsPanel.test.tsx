@@ -181,6 +181,24 @@ describe('ResultsPanel', () => {
     expect(screen.getByText('Κορυφαίες ενότητες')).toBeInTheDocument()
   })
 
+  it('passes refusal_reason through to the semantic answer and shows the refusal', () => {
+    const result: SemanticResult = {
+      mode: 'semantic',
+      answer: 'Συνθετικό κείμενο άρνησης για δοκιμή.',
+      citations: [],
+      retrieved_doc_ids: [],
+      model: 'precheck',
+      routing_hint: null,
+      refusal_reason: 'year_out_of_range',
+    }
+
+    render(<ResultsPanel result={result} auditId={11} />)
+
+    expect(screen.getByTestId('refusal')).toBeInTheDocument()
+    expect(screen.getByText(result.answer)).toBeInTheDocument()
+    expect(screen.queryByText('Δεν βρέθηκαν δεδομένα στο εύρος')).not.toBeInTheDocument()
+  })
+
   it('shows a placeholder when there is no result yet', () => {
     render(<ResultsPanel result={null} auditId={null} />)
 

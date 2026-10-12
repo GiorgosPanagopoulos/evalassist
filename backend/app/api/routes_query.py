@@ -2,7 +2,12 @@
 
 Κάθε handler περνάει πάντα από IsolationScope πριν αγγίξει SQLite/ChromaDB,
 και γράφει ακριβώς μία γραμμή στο audit_log ανά κλήση — ακόμη και όταν η
-επεξεργασία μετά την ανάκτηση αποτύχει (audit πριν το re-raise)."""
+επεξεργασία μετά την ανάκτηση αποτύχει (audit πριν το re-raise).
+
+Πριν από οποιαδήποτε ανάκτηση τρέχουν οι ντετερμινιστικοί έλεγχοι του
+app.retrieval.precheck: ανύπαρκτη περίοδος -> 422, και στο semantic endpoint
+έτος/κωδικός πεδίου εκτός εύρους -> 200 με σταθερό κείμενο άρνησης, χωρίς
+retrieval και χωρίς LLM."""
 
 import json
 import logging
@@ -18,8 +23,11 @@ from app.api.schemas import (
     StructuredQueryResponse,
 )
 from app.core.audit import AuditEntry, write_audit
+from app.core.exceptions import InvalidPeriodError
 from app.models.evaluation import CAREER_PERIOD
 from app.retrieval.isolation import IsolationScope
+from app.retrieval.models import SemanticResult
+from app.retrieval.precheck import PRECHECK_MODEL, PrecheckRefusal, check_question, validate_period
 from app.retrieval.routing import route_query
 from app.retrieval.semantic import SemanticRetriever
 from app.retrieval.structured import (
@@ -69,6 +77,11 @@ def query_structured(
     doc_ids: list[str] = []
     try:
         scope = IsolationScope(person_id=request.person_id, period=request.period)
+        # Τα career-wide operations αγνοούν το request.period, άρα δεν το επικυρώνουν.
+        if request.operation in ("get_scores", "compare_periods", "top_bottom_sections"):
+            validate_period(conn, scope.person_id, scope.period)
+        if request.operation == "compare_periods":
+            validate_period(conn, scope.person_id, request.other_period)
         if request.operation == "get_scores":
             result = get_scores(conn, scope)
         elif request.operation == "compare_periods":
@@ -110,21 +123,42 @@ def query_semantic(
     x_user: str = Header(default="anonymous", alias="X-User"),
 ) -> SemanticQueryResponse:
     doc_ids: list[str] = []
+    refusal: PrecheckRefusal | None = None
     try:
         scope = IsolationScope(person_id=request.person_id, period=request.period)
-        # Η "no data in scope" περίπτωση επιστρέφει ήδη ένα valid SemanticResult
-        # με retrieved_doc_ids=[] (όχι exception) — audit + 200 φυσικά, χωρίς
-        # ειδική περίπτωση εδώ.
-        result = retriever.query(request.question, scope)
-        # Advisory routing hint (human-in-the-loop): δεν αλλάζει mode μόνο του,
-        # μόνο ενημερώνει το frontend ώστε να προτείνει "Δομημένη αναζήτηση".
-        result.routing_hint = route_query(request.question)
-        doc_ids = result.retrieved_doc_ids
+        validate_period(conn, scope.person_id, scope.period)
+        refusal = check_question(conn, scope, request.question)
+        if refusal is None:
+            # Η "no data in scope" περίπτωση επιστρέφει ήδη ένα valid SemanticResult
+            # με retrieved_doc_ids=[] (όχι exception) — audit + 200 φυσικά, χωρίς
+            # ειδική περίπτωση εδώ.
+            result = retriever.query(request.question, scope)
+            # Advisory routing hint (human-in-the-loop): δεν αλλάζει mode μόνο του,
+            # μόνο ενημερώνει το frontend ώστε να προτείνει "Δομημένη αναζήτηση".
+            result.routing_hint = route_query(request.question)
+            doc_ids = result.retrieved_doc_ids
+    except InvalidPeriodError:
+        # Λάθος αιτήματος πριν από οποιαδήποτε ανάκτηση ή prompt.
+        _audit(conn, x_user, request.question, [], "semantic")
+        raise
     except Exception as exc:
         if not doc_ids:
             doc_ids = getattr(exc, "retrieved_doc_ids", []) or []
         _audit(conn, x_user, request.question, doc_ids, "semantic", retriever.prompt_version)
         raise
+
+    if refusal is not None:
+        # Τίποτα δεν ανακτήθηκε και κανένα prompt δεν χρησιμοποιήθηκε: doc_ids=[],
+        # prompt_version/unsupported_ranks=NULL, answer_text = το κείμενο άρνησης.
+        audit_id = _audit(conn, x_user, request.question, [], "semantic", answer_text=refusal.text)
+        refused = SemanticResult(
+            answer=refusal.text,
+            citations=[],
+            retrieved_doc_ids=[],
+            model=PRECHECK_MODEL,
+            refusal_reason=refusal.reason,
+        )
+        return SemanticQueryResponse(result=refused, audit_id=audit_id)
 
     audit_id = _audit(
         conn,
