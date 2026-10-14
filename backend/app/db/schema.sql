@@ -112,7 +112,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
     mode                TEXT NOT NULL CHECK (mode IN ('structured', 'semantic')),
     prompt_version      TEXT,
     unsupported_ranks   TEXT,
-    answer_text         TEXT
+    answer_text         TEXT,
+    refusal_reason      TEXT
 );
 
 -- Τα δύο triggers μπλοκάρουν UPDATE/DELETE στο audit_log μέσω DML από την

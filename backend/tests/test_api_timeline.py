@@ -306,6 +306,8 @@ def test_real_db_m01253_if_present():
     db_path = Path(path)
     shutil.copyfile(REAL_DB, db_path)
     try:
+        # Deploy order is migrate first, then serve (python -m app.db.database).
+        init_db(db_path)
         _override_settings(db_path)
         client = TestClient(app)
         response = client.get(f"/person/{PERSON}/timeline")

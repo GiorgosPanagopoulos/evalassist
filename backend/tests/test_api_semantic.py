@@ -441,6 +441,9 @@ def _assert_precheck_refusal(db_path: Path, question: str, reason: str, text_pre
     assert rows[0]["prompt_version"] is None
     assert rows[0]["unsupported_ranks"] is None
     assert rows[0]["answer_text"] == result["answer"]
+    # Ο κωδικός γράφεται verbatim ως απλό TEXT (όχι repr του enum).
+    assert type(rows[0]["refusal_reason"]) is str
+    assert rows[0]["refusal_reason"] == reason
 
 
 def test_year_out_of_range_refused_without_retrieval():
@@ -496,6 +499,13 @@ def test_question_passing_precheck_reaches_retriever():
         assert response.status_code == 200
         assert response.json()["result"]["refusal_reason"] is None
         assert retriever.calls == ["Τι λέει το πεδίο 142β για το 2025;"]
+        conn = sqlite3.connect(db_path)
+        null_rows = conn.execute(
+            "SELECT COUNT(*) FROM audit_log WHERE id = ? AND refusal_reason IS NULL",
+            (response.json()["audit_id"],),
+        ).fetchone()[0]
+        conn.close()
+        assert null_rows == 1
     finally:
         _clear_overrides()
         os.remove(db_path)

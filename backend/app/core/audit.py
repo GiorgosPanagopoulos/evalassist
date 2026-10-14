@@ -21,6 +21,9 @@ class AuditEntry(BaseModel):
     # Στο semantic mode είναι το κείμενο της απάντησης του LLM, στο structured
     # mode το serialized result data, και None στα error paths.
     answer_text: str | None = None
+    # Κωδικός άρνησης του precheck (app.retrieval.precheck.RefusalReason),
+    # verbatim. None όταν δεν υπήρξε άρνηση.
+    refusal_reason: str | None = None
 
 
 def write_audit(conn: sqlite3.Connection, entry: AuditEntry) -> int:
@@ -28,8 +31,9 @@ def write_audit(conn: sqlite3.Connection, entry: AuditEntry) -> int:
     cursor = conn.execute(
         """
         INSERT INTO audit_log
-            (user, query, retrieved_doc_ids, mode, prompt_version, unsupported_ranks, answer_text)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+            (user, query, retrieved_doc_ids, mode, prompt_version, unsupported_ranks, answer_text,
+             refusal_reason)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             entry.user,
@@ -39,6 +43,7 @@ def write_audit(conn: sqlite3.Connection, entry: AuditEntry) -> int:
             entry.prompt_version,
             json.dumps(entry.unsupported_ranks) if entry.unsupported_ranks is not None else None,
             entry.answer_text,
+            entry.refusal_reason,
         ),
     )
     return cursor.lastrowid

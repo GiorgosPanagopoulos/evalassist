@@ -51,6 +51,7 @@ def _audit(
     prompt_version: str | None = None,
     unsupported_ranks: list[str] | None = None,
     answer_text: str | None = None,
+    refusal_reason: str | None = None,
 ) -> int:
     audit_id = write_audit(
         conn,
@@ -62,6 +63,7 @@ def _audit(
             prompt_version=prompt_version,
             unsupported_ranks=unsupported_ranks,
             answer_text=answer_text,
+            refusal_reason=refusal_reason,
         ),
     )
     conn.commit()
@@ -149,8 +151,17 @@ def query_semantic(
 
     if refusal is not None:
         # Τίποτα δεν ανακτήθηκε και κανένα prompt δεν χρησιμοποιήθηκε: doc_ids=[],
-        # prompt_version/unsupported_ranks=NULL, answer_text = το κείμενο άρνησης.
-        audit_id = _audit(conn, x_user, request.question, [], "semantic", answer_text=refusal.text)
+        # prompt_version/unsupported_ranks=NULL, answer_text = το κείμενο άρνησης,
+        # refusal_reason = ο κωδικός άρνησης.
+        audit_id = _audit(
+            conn,
+            x_user,
+            request.question,
+            [],
+            "semantic",
+            answer_text=refusal.text,
+            refusal_reason=refusal.reason,
+        )
         refused = SemanticResult(
             answer=refusal.text,
             citations=[],

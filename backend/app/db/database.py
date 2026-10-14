@@ -26,6 +26,12 @@ def _migrate_audit_log(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE audit_log ADD COLUMN unsupported_ranks TEXT")
     if columns and "answer_text" not in columns:
         conn.execute("ALTER TABLE audit_log ADD COLUMN answer_text TEXT")
+    # ADD COLUMN nullable χωρίς DEFAULT: το SQLite αλλάζει μόνο το schema στο
+    # sqlite_master, χωρίς rebuild και χωρίς να ξαναγράψει γραμμές. Οι υπάρχουσες
+    # γραμμές διαβάζονται με refusal_reason NULL (κανένα UPDATE, άρα τα
+    # append-only triggers δεν ενεργοποιούνται) και τα triggers μένουν ανέγγιχτα.
+    if columns and "refusal_reason" not in columns:
+        conn.execute("ALTER TABLE audit_log ADD COLUMN refusal_reason TEXT")
 
 
 def _migrate_service_time_check(conn: sqlite3.Connection) -> None:

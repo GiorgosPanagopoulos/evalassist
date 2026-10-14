@@ -7,6 +7,9 @@
   - answer_text roundtrip με ελληνικό κείμενο που περιέχει εισαγωγικά.
   - migration path: DB χωρίς answer_text στήλη, init_db προσθέτει τη στήλη,
     διατηρεί την παλιά γραμμή, και ενεργοποιεί τα triggers.
+  - migration refusal_reason: πάνω στο τρέχον schema της πραγματικής DB
+    (με unsupported_ranks/answer_text, χωρίς refusal_reason) κρατά όλες τις
+    γραμμές και τα triggers, και τρέχει δύο φορές χωρίς σφάλμα.
 
 Εκτελείται standalone: `python tests/test_audit_integrity.py`
 """
@@ -201,6 +204,142 @@ def test_migration_adds_answer_text_and_keeps_triggers():
         os.remove(db_path)
 
 
+# Το schema του audit_log ακριβώς όπως είναι σήμερα στην πραγματική DB
+# (`sqlite3 data/evalassist.db ".schema audit_log"`), πριν από το refusal_reason:
+# οι unsupported_ranks/answer_text μπήκαν με ALTER ADD COLUMN, μαζί τα triggers.
+_PRE_REFUSAL_REASON_SCHEMA = """
+CREATE TABLE audit_log (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts                  TEXT NOT NULL DEFAULT (datetime('now')),
+    user                TEXT NOT NULL,
+    query               TEXT NOT NULL,
+    retrieved_doc_ids   TEXT,
+    mode                TEXT NOT NULL CHECK (mode IN ('structured', 'semantic')),
+    prompt_version      TEXT
+, unsupported_ranks TEXT, answer_text TEXT);
+CREATE TRIGGER audit_log_no_update
+BEFORE UPDATE ON audit_log
+BEGIN
+    SELECT RAISE(ABORT, 'audit_log is append-only: UPDATE is not allowed');
+END;
+CREATE TRIGGER audit_log_no_delete
+BEFORE DELETE ON audit_log
+BEGIN
+    SELECT RAISE(ABORT, 'audit_log is append-only: DELETE is not allowed');
+END;
+"""
+
+_PRE_REFUSAL_REASON_ROWS = [
+    ("u1", "q structured", '["doc1"]', "structured", None, None, '{"score": 95}'),
+    ("u2", "q semantic", '["doc2"]', "semantic", "v3", '["Σμχος"]', "Απάντηση LLM."),
+    ("u3", "Τι έγραφε η έκθεση του 2003;", "[]", "semantic", None, None, "Δεν υπάρχει περίοδος."),
+]
+
+_OLD_COLUMNS = (
+    "id, ts, user, query, retrieved_doc_ids, mode, prompt_version, unsupported_ranks, answer_text"
+)
+
+
+def _make_pre_refusal_reason_db() -> Path:
+    db_path = _make_temp_db_path()
+    conn = sqlite3.connect(db_path)
+    conn.executescript(_PRE_REFUSAL_REASON_SCHEMA)
+    conn.executemany(
+        "INSERT INTO audit_log (user, query, retrieved_doc_ids, mode, prompt_version, "
+        "unsupported_ranks, answer_text) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        _PRE_REFUSAL_REASON_ROWS,
+    )
+    conn.commit()
+    conn.close()
+    return db_path
+
+
+def _old_rows(conn: sqlite3.Connection) -> list[tuple]:
+    return [tuple(r) for r in conn.execute(f"SELECT {_OLD_COLUMNS} FROM audit_log ORDER BY id")]
+
+
+def _trigger_sql(conn: sqlite3.Connection) -> dict[str, str]:
+    return dict(
+        conn.execute(
+            "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'audit_log'"
+        ).fetchall()
+    )
+
+
+def test_migration_adds_refusal_reason_keeps_rows_and_triggers():
+    db_path = _make_pre_refusal_reason_db()
+    try:
+        conn = sqlite3.connect(db_path)
+        rows_before = _old_rows(conn)
+        triggers_before = _trigger_sql(conn)
+        conn.close()
+        assert len(rows_before) == 3
+        assert set(triggers_before) == {"audit_log_no_update", "audit_log_no_delete"}
+
+        init_db(db_path)
+
+        conn = sqlite3.connect(db_path)
+        columns = [r[1] for r in conn.execute("PRAGMA table_info(audit_log)")]
+        assert columns.count("refusal_reason") == 1
+        assert _old_rows(conn) == rows_before
+        null_count = conn.execute(
+            "SELECT COUNT(*) FROM audit_log WHERE refusal_reason IS NULL"
+        ).fetchone()[0]
+        assert null_count == 3
+        assert _trigger_sql(conn) == triggers_before
+
+        for statement in (
+            "UPDATE audit_log SET refusal_reason = 'year_out_of_range' WHERE id = 3",
+            "UPDATE audit_log SET user = 'x' WHERE id = 1",
+            "DELETE FROM audit_log WHERE id = 1",
+        ):
+            try:
+                conn.execute(statement)
+                assert False, f"expected '{statement}' to be blocked after migration"
+            except sqlite3.DatabaseError as exc:
+                assert "append-only" in str(exc)
+        assert _old_rows(conn) == rows_before
+
+        # Νέα γραμμή μετά το migration: ο κωδικός γράφεται verbatim ως TEXT.
+        audit_id = write_audit(
+            conn,
+            AuditEntry(
+                user="u4",
+                query="q",
+                retrieved_doc_ids=[],
+                mode="semantic",
+                refusal_reason="year_out_of_range",
+            ),
+        )
+        conn.commit()
+        value = conn.execute(
+            "SELECT refusal_reason FROM audit_log WHERE id = ?", (audit_id,)
+        ).fetchone()[0]
+        conn.close()
+        assert type(value) is str
+        assert value == "year_out_of_range"
+    finally:
+        os.remove(db_path)
+
+
+def test_migration_runs_twice_without_error():
+    db_path = _make_pre_refusal_reason_db()
+    try:
+        init_db(db_path)
+        init_db(db_path)
+
+        conn = sqlite3.connect(db_path)
+        columns = [r[1] for r in conn.execute("PRAGMA table_info(audit_log)")]
+        count = conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
+        triggers = _trigger_sql(conn)
+        conn.close()
+        assert columns.count("refusal_reason") == 1
+        assert count == 3
+        assert set(triggers) == {"audit_log_no_update", "audit_log_no_delete"}
+    finally:
+        os.remove(db_path)
+
+
 def run_all():
     tests = [
         test_init_db_write_audit_returns_id,
@@ -209,6 +348,8 @@ def run_all():
         test_row_survives_blocked_update_and_delete,
         test_answer_text_roundtrip_with_greek_quotes,
         test_migration_adds_answer_text_and_keeps_triggers,
+        test_migration_adds_refusal_reason_keeps_rows_and_triggers,
+        test_migration_runs_twice_without_error,
     ]
     for test in tests:
         test()
