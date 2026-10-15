@@ -87,7 +87,14 @@ function Workspace({ api, me, onLogout, onPasswordChanged }: WorkspaceProps) {
       >
         <Brand />
 
-        <QueryForm api={api} onResult={handleResult} onError={handleError} onModeLabelChange={setModeLabel} />
+        <QueryForm
+          api={api}
+          onResult={handleResult}
+          onError={handleError}
+          onModeLabelChange={setModeLabel}
+          // Χωρίς features από τον server η επιλογή μένει κλειστή.
+          semanticEnabled={me.features?.semantic_enabled === true}
+        />
       </aside>
 
       <div

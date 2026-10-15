@@ -255,19 +255,21 @@ Every data endpoint is scoped through `IsolationScope` before it touches SQLite 
 |---|---|---|
 | POST | `/api/auth/login` | Public. Username/password login, sets the session cookie. Same 401 for unknown user, wrong password, locked or disabled account |
 | POST | `/api/auth/logout` | Ends the session server-side |
-| GET | `/api/auth/me` | Current user (`username`, `role`, `must_change_pw`) |
+| GET | `/api/auth/me` | Current user (`username`, `role`, `must_change_pw`) and `features.semantic_enabled` |
 | POST | `/api/auth/change-password` | Change own password (minimum 12 characters), ends the user's other sessions |
 | GET, POST | `/api/admin/users` | Admin only. List users, create a user with a one-time temporary password |
 | POST | `/api/admin/users/{id}/disable` | Admin only. Disables the user and ends all their sessions; the last active admin cannot be disabled |
 | POST | `/api/admin/users/{id}/reset-password` | Admin only. New one-time temporary password, ends all sessions, unlocks |
 | POST | `/api/query/structured` | Deterministic SQL lookup, `get_scores`, `compare_periods` or `top_bottom_sections`, no LLM involved |
-| POST | `/api/query/semantic` | Semantic RAG query: embed the question, retrieve from ChromaDB, rerank, generate a grounded, cited answer |
+| POST | `/api/query/semantic` | Semantic RAG query: embed the question, retrieve from ChromaDB, rerank, generate a grounded, cited answer. Returns 403 (`code: semantic_disabled`, audited) unless `SEMANTIC_ENABLED=true` |
 | GET | `/api/persons` | List all persons (`person_id`, `name`), used to populate pickers |
 | GET | `/api/persons/{person_id}/periods` | List evaluation periods available for a given person |
 | GET | `/api/person/{person_id}/timeline` | Per-person score timeline with cited points |
 | GET | `/api/health` | Public. Service health, including whether the local Ollama server is reachable |
 
 `/docs`, `/redoc` and `/openapi.json` are off unless `ENABLE_DOCS=true`. When `frontend/dist` exists, the backend also serves the built frontend at `/`, after the `/api` routes.
+
+Logs carry no request content, and this is enforced in code rather than by uvicorn flags. An unexpected exception returns a generic 500 and logs only its type and the `file:line` inside `backend/app` where it happened, never its message, locals or traceback. A LogRecord factory strips tracebacks from every other log record, and the `uvicorn.access` logger, whose URLs contain person ids, is disabled at startup unless `ACCESS_LOG=true`. The frontend bundles its fonts (`@fontsource`) and makes no request outside its own origin; `npm run check:dist` fails the build check on any external URL in `frontend/dist`.
 
 Domain exceptions are mapped to HTTP status codes centrally in `app/api/main.py`: `NotFoundError` becomes 404, `IsolationError` becomes 400, `LLMUnavailableError` becomes 503.
 
@@ -291,6 +293,8 @@ All keys below live in `backend/.env.example`. Copy it to `backend/.env` and ove
 | `SESSION_HOURS` | Absolute session lifetime in hours | No | `8` |
 | `COOKIE_PATH` | Session cookie path; set to `/evalassist/` behind the portal | No | `/` |
 | `ENABLE_DOCS` | Serve `/docs`, `/redoc`, `/openapi.json` | No | `false` |
+| `SEMANTIC_ENABLED` | Enable the semantic RAG endpoint; set to `true` by hand on development machines | No | `false` |
+| `ACCESS_LOG` | Keep uvicorn's per-request access log (URLs contain person ids) | No | `false` |
 | `OLLAMA_TIMEOUT_S` | Ollama HTTP read timeout in seconds | No | `120` |
 
 ## Project Structure
@@ -323,6 +327,7 @@ evalassist/
         audit.py             AuditEntry, write_audit
         prompt_loader.py     versioned prompt loading (prompts/<name>/vN.txt)
         exceptions.py        domain exceptions (NotFoundError, IsolationError, LLMUnavailableError)
+        log_safety.py        content-free error logging middleware + traceback-stripping LogRecord factory
       prompts/
         semantic_rag/
           v1.txt              semantic RAG system prompt

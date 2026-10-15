@@ -103,13 +103,12 @@ class SemanticRetriever:
         # στο LLM ως context. Μόνο logging, δεν αλλάζει την απάντηση.
         unsupported_ranks = find_unsupported_ranks(answer, user_prompt)
         if unsupported_ranks:
+            # Μόνο πλήθος και prompt_version: person_id και αποσπάσματα της
+            # απάντησης δεν γράφονται στο log (οι βαθμοί είναι στο audit_log).
             logger.warning(
-                "Rank validator: μη τεκμηριωμένοι βαθμοί στην απάντηση "
-                "(doc_ids=%s, person_id=%s, prompt_version=%s): %s",
-                retrieved_doc_ids,
-                scope.person_id,
+                "Rank validator: %d μη τεκμηριωμένοι βαθμοί στην απάντηση (prompt_version=%s)",
+                len(unsupported_ranks),
                 self.prompt_version,
-                unsupported_ranks,
             )
 
         return SemanticResult(

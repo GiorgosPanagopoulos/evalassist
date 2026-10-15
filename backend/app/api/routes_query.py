@@ -12,10 +12,12 @@ retrieval και χωρίς LLM."""
 import json
 import logging
 import sqlite3
+from typing import Callable
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
+from fastapi.responses import JSONResponse
 
-from app.api.deps import get_db, get_semantic_retriever
+from app.api.deps import get_db, get_semantic_retriever_factory
 from app.api.schemas import (
     SemanticQueryRequest,
     SemanticQueryResponse,
@@ -24,6 +26,7 @@ from app.api.schemas import (
 )
 from app.auth.deps import SessionUser, require_user
 from app.core.audit import AuditEntry, write_audit
+from app.core.config import Settings, get_settings
 from app.core.exceptions import InvalidPeriodError
 from app.models.evaluation import CAREER_PERIOD
 from app.retrieval.isolation import IsolationScope
@@ -41,6 +44,9 @@ from app.retrieval.structured import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+SEMANTIC_DISABLED_CODE = "semantic_disabled"
+SEMANTIC_DISABLED_DETAIL = "Η σημασιολογική αναζήτηση δεν είναι ενεργή σε αυτή την εγκατάσταση."
 
 
 def _audit(
@@ -110,21 +116,44 @@ def query_structured(
 
     try:
         answer_text = json.dumps(result.data, ensure_ascii=False)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError) as exc:
         # Fail safe: το audit record έχει προτεραιότητα έναντι του answer_text.
-        logger.warning("Αποτυχία serialization του result.data για audit", exc_info=True)
+        # Μόνο ο τύπος: το μήνυμα της εξαίρεσης μπορεί να περιέχει δεδομένα.
+        logger.warning("Αποτυχία serialization του result.data για audit (%s)", type(exc).__name__)
         answer_text = None
     audit_id = _audit(conn, user.username, request.model_dump_json(), doc_ids, "structured", answer_text=answer_text)
     return StructuredQueryResponse(result=result, audit_id=audit_id)
 
 
-@router.post("/semantic", response_model=SemanticQueryResponse)
+@router.post(
+    "/semantic",
+    response_model=SemanticQueryResponse,
+    responses={status.HTTP_403_FORBIDDEN: {"description": SEMANTIC_DISABLED_DETAIL}},
+)
 def query_semantic(
     request: SemanticQueryRequest,
     conn: sqlite3.Connection = Depends(get_db),
-    retriever: SemanticRetriever = Depends(get_semantic_retriever),
+    make_retriever: Callable[[], SemanticRetriever] = Depends(get_semantic_retriever_factory),
+    settings: Settings = Depends(get_settings),
     user: SessionUser = Depends(require_user),
-) -> SemanticQueryResponse:
+) -> SemanticQueryResponse | JSONResponse:
+    if not settings.SEMANTIC_ENABLED:
+        # Πριν από scope, precheck, retrieval ή LLM, και χωρίς να κληθεί το
+        # factory: με το flag κλειστό τα μοντέλα δεν φορτώνονται ποτέ.
+        _audit(
+            conn,
+            user.username,
+            request.question,
+            [],
+            "semantic",
+            refusal_reason=SEMANTIC_DISABLED_CODE,
+        )
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={"detail": SEMANTIC_DISABLED_DETAIL, "code": SEMANTIC_DISABLED_CODE},
+        )
+
+    retriever = make_retriever()
     doc_ids: list[str] = []
     refusal: PrecheckRefusal | None = None
     try:

@@ -7,7 +7,17 @@ codes εδώ — μόνο εδώ, ποτέ πιο κάτω στο retrieval laye
 /api/auth/login. Κάθε router με δεδομένα παίρνει require_user στο
 include_router, και το tests/test_auth_route_coverage.py σπάει αν ένα νέο
 route μείνει χωρίς auth. Frontend και API είναι same-origin (Vite dev
-proxy τοπικά, portal στην παραγωγή), άρα κανένα CORS."""
+proxy τοπικά, portal στην παραγωγή), άρα κανένα CORS.
+
+Logs χωρίς περιεχόμενο (βλ. app.core.log_safety): το SafeErrorMiddleware
+γράφει μόνο τύπο και αρχείο:γραμμή μιας εξαίρεσης, το LogRecord factory
+αφαιρεί κάθε traceback, και με ACCESS_LOG=False ο logger uvicorn.access
+απενεργοποιείται στο startup. Επιβάλλονται από τον κώδικα, όχι από flags
+της γραμμής εντολών του uvicorn."""
+
+import logging
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -22,26 +32,46 @@ from app.api import (
     routes_timeline,
 )
 from app.auth.deps import require_admin, require_user
-from app.core.config import BASE_DIR, get_settings
+from app.core.config import BASE_DIR, Settings, get_settings
 from app.core.exceptions import (
     InvalidPeriodError,
     IsolationError,
     LLMUnavailableError,
     NotFoundError,
 )
+from app.core.log_safety import SafeErrorMiddleware, install_log_redaction
 
 FRONTEND_DIST = BASE_DIR.parent / "frontend" / "dist"
+
+ACCESS_LOGGER = "uvicorn.access"
+
+
+def _lifespan_for(settings: Settings):
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        # Το uvicorn ρυθμίζει το logging (dictConfig) πριν φορτώσει το app,
+        # άρα εδώ η απενεργοποίηση δεν αναιρείται. Τα URLs έχουν person_id.
+        if not settings.ACCESS_LOG:
+            logging.getLogger(ACCESS_LOGGER).disabled = True
+        yield
+
+    return lifespan
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    install_log_redaction()
     docs = settings.ENABLE_DOCS
     app = FastAPI(
         title="EvalAssist API",
         docs_url="/docs" if docs else None,
         redoc_url="/redoc" if docs else None,
         openapi_url="/openapi.json" if docs else None,
+        lifespan=_lifespan_for(settings),
     )
+    # Εξωτερικό middleware: πιάνει κάθε μη αναμενόμενη εξαίρεση και ΔΕΝ την
+    # ξαναπετά, άρα ούτε το uvicorn τυπώνει traceback.
+    app.add_middleware(SafeErrorMiddleware)
 
     authenticated = [Depends(require_user)]
 

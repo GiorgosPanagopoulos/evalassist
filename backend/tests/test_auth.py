@@ -130,6 +130,7 @@ def test_successful_login_sets_hardened_cookie():
             "username": "alice",
             "role": "user",
             "must_change_pw": False,
+            "features": {"semantic_enabled": False},
         }
         set_cookie = response.headers["set-cookie"].lower()
         for flag in ("httponly", "secure", "samesite=strict", "path=/", "max-age=28800"):

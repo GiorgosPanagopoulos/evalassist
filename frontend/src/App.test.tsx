@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import App from './App'
 import { ApiClient } from './api/client'
 import type { Me } from './api/types'
+import { SEMANTIC_DISABLED_TEXT } from './components/QueryForm'
 
 // Ψεύτικο backend: "METHOD path" -> [status, body] ή συνάρτηση που τα
 // επιστρέφει. Ο πραγματικός ApiClient τρέχει από πάνω, ώστε να ελέγχεται και
@@ -11,8 +12,9 @@ import type { Me } from './api/types'
 type Reply = [number, unknown]
 type Routes = Record<string, Reply | (() => Reply)>
 
-const USER: Me = { id: 2, username: 'alice', role: 'user', must_change_pw: false }
-const ADMIN: Me = { id: 1, username: 'root', role: 'admin', must_change_pw: false }
+const FEATURES = { semantic_enabled: true }
+const USER: Me = { id: 2, username: 'alice', role: 'user', must_change_pw: false, features: FEATURES }
+const ADMIN: Me = { id: 1, username: 'root', role: 'admin', must_change_pw: false, features: FEATURES }
 const PERSONS = [{ person_id: 'p1', name: 'Συνθετικός Α' }]
 
 function makeApi(routes: Routes) {
@@ -161,5 +163,26 @@ describe('App auth flow', () => {
 
     expect(await screen.findByRole('form', { name: 'Σύνδεση' })).toBeInTheDocument()
     expect(fetchFn.mock.calls.some(([url, init]) => url === 'api/auth/logout' && init?.method === 'POST')).toBe(true)
+  })
+
+  it('features.semantic_enabled=false from /me disables the Σημασιολογική option with an explanation', async () => {
+    const { api } = makeApi({
+      ...COMMON,
+      'GET api/auth/me': [200, { ...USER, features: { semantic_enabled: false } }],
+    })
+    render(<App api={api} />)
+
+    const semantic = await screen.findByRole('button', { name: 'Σημασιολογική' })
+    expect(semantic).toBeDisabled()
+    expect(semantic).toHaveAccessibleDescription(SEMANTIC_DISABLED_TEXT)
+    expect(screen.getByRole('button', { name: 'Δομημένη' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('features.semantic_enabled=true from /me leaves the Σημασιολογική option enabled', async () => {
+    const { api } = makeApi({ ...COMMON, 'GET api/auth/me': [200, USER] })
+    render(<App api={api} />)
+
+    expect(await screen.findByRole('button', { name: 'Σημασιολογική' })).toBeEnabled()
+    expect(screen.queryByText(SEMANTIC_DISABLED_TEXT)).not.toBeInTheDocument()
   })
 })

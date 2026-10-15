@@ -6,7 +6,7 @@
 """
 
 import sqlite3
-from typing import Iterator
+from typing import Callable, Iterator
 
 from fastapi import Depends
 
@@ -33,3 +33,11 @@ def get_semantic_retriever() -> SemanticRetriever:
     if _semantic_retriever is None:
         _semantic_retriever = SemanticRetriever()
     return _semantic_retriever
+
+
+def get_semantic_retriever_factory() -> Callable[[], SemanticRetriever]:
+    """Επιστρέφει τη συνάρτηση, ΟΧΙ τον retriever. Το /api/query/semantic
+    ελέγχει πρώτα το SEMANTIC_ENABLED και μόνο μετά την καλεί, ώστε με το
+    flag κλειστό να μη φορτώνονται ποτέ bge-m3/reranker. Ο έλεγχος δεν
+    εξαρτάται από τη σειρά επίλυσης των dependencies."""
+    return get_semantic_retriever

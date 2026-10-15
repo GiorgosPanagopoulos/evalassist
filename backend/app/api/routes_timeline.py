@@ -64,9 +64,12 @@ def person_timeline(
 
     try:
         answer_text = json.dumps([p.model_dump() for p in result.points], ensure_ascii=False)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError) as exc:
         # Fail safe: το audit record έχει προτεραιότητα έναντι του answer_text.
-        logger.warning("Αποτυχία serialization των timeline points για audit", exc_info=True)
+        # Μόνο ο τύπος: το μήνυμα της εξαίρεσης μπορεί να περιέχει δεδομένα.
+        logger.warning(
+            "Αποτυχία serialization των timeline points για audit (%s)", type(exc).__name__
+        )
         answer_text = None
     audit_id = _audit(conn, user.username, person_id, doc_ids, answer_text=answer_text)
     return TimelineResponse(result=result, audit_id=audit_id)

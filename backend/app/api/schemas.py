@@ -72,11 +72,18 @@ class LoginRequest(BaseModel):
     password: str = Field(max_length=1024)
 
 
+class Features(BaseModel):
+    """Δυνατότητες της εγκατάστασης που το frontend χρειάζεται να ξέρει."""
+
+    semantic_enabled: bool
+
+
 class MeResponse(BaseModel):
     id: int
     username: str
     role: Literal["admin", "user"]
     must_change_pw: bool
+    features: Features
 
 
 class ChangePasswordRequest(BaseModel):
