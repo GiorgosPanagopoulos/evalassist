@@ -23,7 +23,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fastapi.testclient import TestClient  # noqa: E402
+from auth_helpers import logged_in_client  # noqa: E402
 
 from app.api.main import app  # noqa: E402
 from app.core.config import Settings, get_settings  # noqa: E402
@@ -122,10 +122,10 @@ def test_get_scores_scoped_to_person_and_period():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
         response = client.post(
-            "/query/structured",
+            "/api/query/structured",
             json={"person_id": "p1", "period": PERIOD, "operation": "get_scores"},
         )
 
@@ -144,10 +144,10 @@ def test_other_person_data_never_leaks():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
         response = client.post(
-            "/query/structured",
+            "/api/query/structured",
             json={"person_id": "p1", "period": PERIOD, "operation": "get_scores"},
         )
 
@@ -164,10 +164,10 @@ def test_audit_row_written_with_structured_mode():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
         response = client.post(
-            "/query/structured",
+            "/api/query/structured",
             json={"person_id": "p1", "period": PERIOD, "operation": "top_bottom_sections", "n": 1},
         )
         audit_id = response.json()["audit_id"]
@@ -185,11 +185,11 @@ def test_invalid_operation_field_combo_is_422():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
         # compare_periods χωρίς other_period -> μη έγκυρος συνδυασμός
         response = client.post(
-            "/query/structured",
+            "/api/query/structured",
             json={"person_id": "p1", "period": PERIOD, "operation": "compare_periods"},
         )
 
@@ -203,10 +203,10 @@ def test_get_promotions_table_returns_judged_for_and_career_doc_ids():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
         response = client.post(
-            "/query/structured",
+            "/api/query/structured",
             json={"person_id": "p1", "period": PERIOD, "operation": "get_promotions_table"},
         )
 
@@ -227,10 +227,10 @@ def test_get_promotions_table_other_person_data_never_leaks():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
         response = client.post(
-            "/query/structured",
+            "/api/query/structured",
             json={"person_id": "p2", "period": PERIOD, "operation": "get_promotions_table"},
         )
 
@@ -247,10 +247,10 @@ def test_get_promotions_table_writes_audit_row():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
         response = client.post(
-            "/query/structured",
+            "/api/query/structured",
             json={"person_id": "p1", "period": PERIOD, "operation": "get_promotions_table"},
         )
         audit_id = response.json()["audit_id"]
@@ -268,10 +268,10 @@ def test_get_service_time_table_empty_result_is_200_not_error():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
         response = client.post(
-            "/query/structured",
+            "/api/query/structured",
             json={"person_id": "p1", "period": PERIOD, "operation": "get_service_time_table"},
         )
 
@@ -286,10 +286,10 @@ def test_promotions_table_operation_rejects_other_period():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
         response = client.post(
-            "/query/structured",
+            "/api/query/structured",
             json={
                 "person_id": "p1",
                 "period": PERIOD,
@@ -308,7 +308,7 @@ def test_unknown_period_is_422_with_audit_for_period_scoped_operations():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
         bogus = "2030-01-01..2030-12-31"
         payloads = [
             {"person_id": "p1", "period": bogus, "operation": "get_scores"},
@@ -319,7 +319,7 @@ def test_unknown_period_is_422_with_audit_for_period_scoped_operations():
             {"person_id": "ghost", "period": PERIOD, "operation": "get_scores"},
         ]
         for payload in payloads:
-            response = client.post("/query/structured", json=payload)
+            response = client.post("/api/query/structured", json=payload)
             assert response.status_code == 422, payload
             assert "δεν υπάρχει στον φάκελο" in response.json()["detail"], payload
 
@@ -341,10 +341,10 @@ def test_career_wide_operations_ignore_period_validation():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
         for operation in ("get_promotions_table", "get_service_time_table"):
             response = client.post(
-                "/query/structured",
+                "/api/query/structured",
                 json={"person_id": "p1", "period": "2030-01-01..2030-12-31", "operation": operation},
             )
             assert response.status_code == 200, operation

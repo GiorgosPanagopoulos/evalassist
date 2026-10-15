@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fastapi.testclient import TestClient  # noqa: E402
+from auth_helpers import logged_in_client  # noqa: E402
 
 from app.api.deps import get_semantic_retriever  # noqa: E402
 from app.api.main import app  # noqa: E402
@@ -164,10 +164,10 @@ def test_response_embeds_result_and_audit_id():
     try:
         _override_settings(db_path)
         app.dependency_overrides[get_semantic_retriever] = lambda: FakeSemanticRetriever()
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
         response = client.post(
-            "/query/semantic",
+            "/api/query/semantic",
             json={"person_id": "p1", "period": PERIOD, "question": "Πώς ήταν η στοχοθεσία;"},
         )
 
@@ -186,10 +186,10 @@ def test_audit_row_has_semantic_mode_and_citation_doc_ids():
     try:
         _override_settings(db_path)
         app.dependency_overrides[get_semantic_retriever] = lambda: FakeSemanticRetriever()
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
         response = client.post(
-            "/query/semantic",
+            "/api/query/semantic",
             json={"person_id": "p1", "period": PERIOD, "question": "Πώς ήταν η στοχοθεσία;"},
         )
         audit_id = response.json()["audit_id"]
@@ -214,10 +214,10 @@ def test_audit_row_records_unsupported_ranks_when_flagged():
         app.dependency_overrides[get_semantic_retriever] = lambda: (
             FakeUnsupportedRankSemanticRetriever()
         )
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
         response = client.post(
-            "/query/semantic",
+            "/api/query/semantic",
             json={"person_id": "p1", "period": PERIOD, "question": "Πώς ήταν η στοχοθεσία;"},
         )
 
@@ -236,10 +236,10 @@ def test_empty_scope_returns_200_with_empty_audit_doc_ids():
     try:
         _override_settings(db_path)
         app.dependency_overrides[get_semantic_retriever] = lambda: FakeEmptySemanticRetriever()
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
         response = client.post(
-            "/query/semantic",
+            "/api/query/semantic",
             # έγκυρη περίοδος, ο fake retriever προσομοιώνει άδειο Chroma για το scope
             json={"person_id": "p1", "period": PERIOD, "question": "Ερώτημα χωρίς δεδομένα"},
         )
@@ -265,10 +265,10 @@ def test_llm_failure_after_retrieval_audits_retrieved_doc_ids():
         app.dependency_overrides[get_semantic_retriever] = lambda: (
             FakeLLMFailureAfterRetrievalRetriever()
         )
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
         response = client.post(
-            "/query/semantic",
+            "/api/query/semantic",
             json={"person_id": "p1", "period": PERIOD, "question": "Πώς ήταν η στοχοθεσία;"},
         )
 
@@ -297,10 +297,10 @@ def test_pre_retrieval_failure_audits_empty_doc_ids():
         app.dependency_overrides[get_semantic_retriever] = lambda: (
             FakePreRetrievalFailureRetriever()
         )
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
         response = client.post(
-            "/query/semantic",
+            "/api/query/semantic",
             json={"person_id": "p1", "period": PERIOD, "question": "Πώς ήταν η στοχοθεσία;"},
         )
 
@@ -326,10 +326,10 @@ def test_routing_hint_present_when_question_matches_heuristic():
     try:
         _override_settings(db_path)
         app.dependency_overrides[get_semantic_retriever] = lambda: FakeSemanticRetriever()
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
         response = client.post(
-            "/query/semantic",
+            "/api/query/semantic",
             json={
                 "person_id": "p1",
                 "period": PERIOD,
@@ -349,10 +349,10 @@ def test_routing_hint_absent_when_question_does_not_match_heuristic():
     try:
         _override_settings(db_path)
         app.dependency_overrides[get_semantic_retriever] = lambda: FakeSemanticRetriever()
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
         response = client.post(
-            "/query/semantic",
+            "/api/query/semantic",
             json={"person_id": "p1", "period": PERIOD, "question": "Πώς ήταν η στοχοθεσία;"},
         )
 
@@ -367,7 +367,7 @@ def _post_with_recording_retriever(db_path: Path, payload: dict):
     _override_settings(db_path)
     retriever = RecordingRetriever()
     app.dependency_overrides[get_semantic_retriever] = lambda: retriever
-    response = TestClient(app).post("/query/semantic", json=payload)
+    response = logged_in_client(app, db_path).post("/api/query/semantic", json=payload)
     return response, retriever
 
 

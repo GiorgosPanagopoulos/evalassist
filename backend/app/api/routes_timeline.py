@@ -9,10 +9,11 @@ import json
 import logging
 import sqlite3
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.api.deps import get_db
+from app.auth.deps import SessionUser, require_user
 from app.core.audit import AuditEntry, write_audit
 from app.retrieval.models import RetrievalMode
 from app.retrieval.timeline import TimelineResult, get_timeline
@@ -51,14 +52,14 @@ def _audit(
 def person_timeline(
     person_id: str,
     conn: sqlite3.Connection = Depends(get_db),
-    x_user: str = Header(default="anonymous", alias="X-User"),
+    user: SessionUser = Depends(require_user),
 ) -> TimelineResponse:
     doc_ids: list[str] = []
     try:
         result = get_timeline(conn, person_id)
         doc_ids = result.retrieved_doc_ids
     except Exception:
-        _audit(conn, x_user, person_id, doc_ids)
+        _audit(conn, user.username, person_id, doc_ids)
         raise
 
     try:
@@ -67,5 +68,5 @@ def person_timeline(
         # Fail safe: το audit record έχει προτεραιότητα έναντι του answer_text.
         logger.warning("Αποτυχία serialization των timeline points για audit", exc_info=True)
         answer_text = None
-    audit_id = _audit(conn, x_user, person_id, doc_ids, answer_text=answer_text)
+    audit_id = _audit(conn, user.username, person_id, doc_ids, answer_text=answer_text)
     return TimelineResponse(result=result, audit_id=audit_id)

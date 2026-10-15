@@ -60,3 +60,51 @@ class StructuredQueryResponse(BaseModel):
 class SemanticQueryResponse(BaseModel):
     result: SemanticResult
     audit_id: int
+
+
+# --- auth / admin ------------------------------------------------------------
+# Τα max_length είναι όριο εισόδου (scrypt πάνω σε τεράστιο string), όχι
+# πολιτική κωδικού: η πολιτική (ελάχιστο μήκος) ελέγχεται στο app.auth.service.
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(max_length=256)
+    password: str = Field(max_length=1024)
+
+
+class MeResponse(BaseModel):
+    id: int
+    username: str
+    role: Literal["admin", "user"]
+    must_change_pw: bool
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(max_length=1024)
+    new_password: str = Field(max_length=1024)
+
+
+class UserOut(BaseModel):
+    id: int
+    username: str
+    role: Literal["admin", "user"]
+    is_active: bool
+    must_change_pw: bool
+    locked: bool
+    created_at: str
+
+
+class CreateUserRequest(BaseModel):
+    username: str = Field(max_length=64)
+    role: Literal["admin", "user"]
+
+
+class CreatedUserResponse(BaseModel):
+    id: int
+    username: str
+    role: Literal["admin", "user"]
+    temp_password: str
+
+
+class TempPasswordResponse(BaseModel):
+    temp_password: str

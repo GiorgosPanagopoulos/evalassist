@@ -133,6 +133,63 @@ BEGIN
     SELECT RAISE(ABORT, 'audit_log is append-only: DELETE is not allowed');
 END;
 
+-- Χρήστες της εφαρμογής. Κανένα self-registration: τους δημιουργεί μόνο ο
+-- admin (ή το CLI app.auth.create_admin για τον πρώτο). password_hash σε
+-- μορφή 'scrypt$n$r$p$salt_hex$hash_hex'. Οι χρόνοι είναι ISO-8601 UTC από
+-- το ρολόι της εφαρμογής (όχι datetime('now')), ώστε lockout και λήξη να
+-- ελέγχονται με ψεύτικο ρολόι στα tests. Πρόσβαση ανά αξιολογούμενο (εκτός
+-- σκοπού σήμερα) μπαίνει αργότερα ως ξεχωριστός πίνακας user_id -> person_id.
+CREATE TABLE IF NOT EXISTS users (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    username         TEXT NOT NULL UNIQUE CHECK (length(username) BETWEEN 3 AND 64),
+    password_hash    TEXT NOT NULL,
+    role             TEXT NOT NULL CHECK (role IN ('admin', 'user')),
+    is_active        INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    must_change_pw   INTEGER NOT NULL DEFAULT 1 CHECK (must_change_pw IN (0, 1)),
+    failed_attempts  INTEGER NOT NULL DEFAULT 0 CHECK (failed_attempts >= 0),
+    locked_until     TEXT,
+    created_at       TEXT NOT NULL,
+    updated_at       TEXT NOT NULL
+);
+
+-- Ενεργά sessions. Στη βάση ΜΟΝΟ το sha256 (hex) του token, ποτέ το raw
+-- token του cookie. Απόλυτη λήξη στο expires_at (χωρίς sliding renewal).
+CREATE TABLE IF NOT EXISTS sessions (
+    token_hash   TEXT PRIMARY KEY CHECK (length(token_hash) = 64),
+    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at   TEXT NOT NULL,
+    expires_at   TEXT NOT NULL
+);
+
+-- Logins, αποτυχίες, lockouts, logout και ενέργειες admin. Χωριστά από το
+-- audit_log (εκείνο καταγράφει queries). Το event ΔΕΝ έχει CHECK: οι τιμές
+-- ελέγχονται από το app.auth.service.AuthEvent, ώστε ένα νέο event να μη
+-- χρειάζεται table rebuild. Χωρίς FK προς users: το log δεν πρέπει να
+-- μπλοκάρει ούτε να εξαρτάται από αλλαγές στους χρήστες. Ποτέ κωδικός ή token.
+CREATE TABLE IF NOT EXISTS auth_log (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts              TEXT NOT NULL,
+    event           TEXT NOT NULL,
+    username        TEXT,
+    actor_user_id   INTEGER,
+    target_user_id  INTEGER,
+    detail          TEXT
+);
+
+-- Ίδιο μοτίβο με audit_log: append-only σε επίπεδο schema.
+CREATE TRIGGER IF NOT EXISTS auth_log_no_update
+BEFORE UPDATE ON auth_log
+BEGIN
+    SELECT RAISE(ABORT, 'auth_log is append-only: UPDATE is not allowed');
+END;
+
+CREATE TRIGGER IF NOT EXISTS auth_log_no_delete
+BEFORE DELETE ON auth_log
+BEGIN
+    SELECT RAISE(ABORT, 'auth_log is append-only: DELETE is not allowed');
+END;
+
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_evaluations_person_period ON evaluations(person_id, period);
 CREATE INDEX IF NOT EXISTS idx_field_scores_eval_id ON field_scores(eval_id);
 CREATE INDEX IF NOT EXISTS idx_documents_person_period ON documents(person_id, period);

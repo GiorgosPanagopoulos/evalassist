@@ -118,10 +118,10 @@ graph TD
 | Technology | Role |
 |---|---|
 | ![Python](https://img.shields.io/badge/Python-3.11%2B-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | Backend language |
-| ![FastAPI](https://img.shields.io/badge/FastAPI-Backend-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | HTTP API layer, CORS, exception to HTTP status mapping |
+| ![FastAPI](https://img.shields.io/badge/FastAPI-Backend-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | HTTP API layer, session auth, exception to HTTP status mapping |
 | ![LangChain](https://img.shields.io/badge/LangChain-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | `RecursiveCharacterTextSplitter` for per-section chunking sub-splits |
 | ![Pydantic](https://img.shields.io/badge/Pydantic-v2-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | Schema validation, `pydantic-settings` for centralized config |
-| ![SQLite](https://img.shields.io/badge/SQLite-Structured%20Store-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | persons, evaluations, scores, documents, audit_log |
+| ![SQLite](https://img.shields.io/badge/SQLite-Structured%20Store-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | persons, evaluations, scores, documents, audit_log, users, sessions, auth_log |
 | ![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector%20Store-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | Vector store for semantic chunks |
 | ![bge-m3](https://img.shields.io/badge/BAAI-bge--m3-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | Local dense embedding model |
 | ![bge-reranker](https://img.shields.io/badge/BAAI-bge--reranker--v2--m3-1B2A4A?style=flat-square&labelColor=1B2A4A&color=C9A227) | Local cross-encoder reranker |
@@ -191,6 +191,17 @@ cd backend
 uvicorn app.api.main:app --reload --port 8000
 ```
 
+### First admin
+
+There is no self-registration. Create the first admin from the command line (runs `init_db` first, asks for the password twice with `getpass`, minimum 12 characters; the password is never written to a file or log):
+
+```bash
+cd backend
+python -m app.auth.create_admin
+```
+
+Further users are created by an admin in the UI (Χρήστες) with a server-generated temporary password, shown once; the user must change it at first login.
+
 ### Frontend
 
 ```bash
@@ -205,6 +216,9 @@ for f in backend/tests/test_*.py; do python "$f"; done
 
 # RAG pipeline evals (isolation_leaks must be 0)
 python evals/run_evals.py
+
+# Golden set against a running backend: credentials only via environment variables
+EVALASSIST_USER=... EVALASSIST_PASSWORD=... python evals/runner/run_golden_set.py --tier A
 
 # Frontend tests
 cd frontend && npm test
@@ -233,15 +247,27 @@ The project targets Python 3.11+ and is developed primarily on macOS and Linux. 
 
 ## API Reference
 
-Every endpoint is scoped through `IsolationScope` before it touches SQLite or ChromaDB, and every call, successful or not, is written to the append-only audit log. Pass the caller identity via the `X-User` header (default `anonymous`); it is recorded on the audit entry, it does not gate authorization.
+All endpoints live under `/api`. Every endpoint except `/api/health` and `/api/auth/login` requires a session: an `HttpOnly`, `Secure`, `SameSite=Strict` cookie set by the login, with an absolute 8 hour expiry (only its sha256 is stored). The audit log records the user of the session; no request header can set it. While a user still has to change a temporary password, every data endpoint returns 403. Five failed logins lock the account for 15 minutes. Logins, failures, lockouts, logouts and admin actions go to the append-only `auth_log` table.
+
+Every data endpoint is scoped through `IsolationScope` before it touches SQLite or ChromaDB, and every call, successful or not, is written to the append-only audit log.
 
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/query/structured` | Deterministic SQL lookup, `get_scores`, `compare_periods` or `top_bottom_sections`, no LLM involved |
-| POST | `/query/semantic` | Semantic RAG query: embed the question, retrieve from ChromaDB, rerank, generate a grounded, cited answer |
-| GET | `/persons` | List all persons (`person_id`, `name`), unscoped, used to populate pickers |
-| GET | `/persons/{person_id}/periods` | List evaluation periods available for a given person |
-| GET | `/health` | Service health, including whether the local Ollama server is reachable |
+| POST | `/api/auth/login` | Public. Username/password login, sets the session cookie. Same 401 for unknown user, wrong password, locked or disabled account |
+| POST | `/api/auth/logout` | Ends the session server-side |
+| GET | `/api/auth/me` | Current user (`username`, `role`, `must_change_pw`) |
+| POST | `/api/auth/change-password` | Change own password (minimum 12 characters), ends the user's other sessions |
+| GET, POST | `/api/admin/users` | Admin only. List users, create a user with a one-time temporary password |
+| POST | `/api/admin/users/{id}/disable` | Admin only. Disables the user and ends all their sessions; the last active admin cannot be disabled |
+| POST | `/api/admin/users/{id}/reset-password` | Admin only. New one-time temporary password, ends all sessions, unlocks |
+| POST | `/api/query/structured` | Deterministic SQL lookup, `get_scores`, `compare_periods` or `top_bottom_sections`, no LLM involved |
+| POST | `/api/query/semantic` | Semantic RAG query: embed the question, retrieve from ChromaDB, rerank, generate a grounded, cited answer |
+| GET | `/api/persons` | List all persons (`person_id`, `name`), used to populate pickers |
+| GET | `/api/persons/{person_id}/periods` | List evaluation periods available for a given person |
+| GET | `/api/person/{person_id}/timeline` | Per-person score timeline with cited points |
+| GET | `/api/health` | Public. Service health, including whether the local Ollama server is reachable |
+
+`/docs`, `/redoc` and `/openapi.json` are off unless `ENABLE_DOCS=true`. When `frontend/dist` exists, the backend also serves the built frontend at `/`, after the `/api` routes.
 
 Domain exceptions are mapped to HTTP status codes centrally in `app/api/main.py`: `NotFoundError` becomes 404, `IsolationError` becomes 400, `LLMUnavailableError` becomes 503.
 
@@ -261,7 +287,10 @@ All keys below live in `backend/.env.example`. Copy it to `backend/.env` and ove
 | `OLLAMA_GEN_MODEL` | Separate model for semantic RAG answer generation only. Leave empty to use OLLAMA_MODEL. For fluent Greek, recommend a Greek-native model. | No | (empty, falls back to `OLLAMA_MODEL`) |
 | `TOP_K_RETRIEVE` | Chunks retrieved from ChromaDB before reranking | No | `20` |
 | `TOP_K_RERANK` | Chunks kept after reranking, passed to the LLM | No | `5` |
-| `ALLOWED_ORIGINS` | CORS origins allowed by the API | No | `["http://localhost:5173"]` |
+| `COOKIE_SECURE` | Session cookie is sent over HTTPS only | No | `true` |
+| `SESSION_HOURS` | Absolute session lifetime in hours | No | `8` |
+| `COOKIE_PATH` | Session cookie path; set to `/evalassist/` behind the portal | No | `/` |
+| `ENABLE_DOCS` | Serve `/docs`, `/redoc`, `/openapi.json` | No | `false` |
 | `OLLAMA_TIMEOUT_S` | Ollama HTTP read timeout in seconds | No | `120` |
 
 ## Project Structure
@@ -275,11 +304,20 @@ evalassist/
   backend/
     app/
       api/
-        main.py                  FastAPI app factory, CORS, exception to HTTP mapping
-        routes_query.py           /query/structured, /query/semantic
-        routes_meta.py            /persons, /persons/{person_id}/periods, /health
+        main.py                  FastAPI app factory, auth wiring, exception to HTTP mapping, static frontend
+        routes_query.py           /api/query/structured, /api/query/semantic
+        routes_meta.py            /api/persons, /api/persons/{person_id}/periods
+        routes_timeline.py        /api/person/{person_id}/timeline
+        routes_health.py          /api/health (public)
+        routes_auth.py            /api/auth/login, logout, me, change-password
+        routes_admin.py           /api/admin/users (admin only)
         schemas.py                request/response models
         deps.py                   DB connection + retriever dependencies
+      auth/
+        passwords.py         scrypt hashing (stdlib)
+        service.py           users, sessions, lockout, auth_log
+        deps.py              require_user / require_admin dependencies
+        create_admin.py      CLI for the first admin
       core/
         config.py           centralized settings (pydantic-settings)
         audit.py             AuditEntry, write_audit
@@ -291,7 +329,7 @@ evalassist/
       db/
         database.py           SQLite connection, init_db, schema migration
         repository.py          idempotent persistence
-        schema.sql              persons, evaluations, scores, documents, audit_log
+        schema.sql              persons, evaluations, scores, documents, audit_log, users, sessions, auth_log
       ingestion/
         parser.py               PDF parsing (PyMuPDF)
         ocr.py                   OCR fallback for scanned pages

@@ -13,7 +13,7 @@ function fakeFetch(status: number, body: unknown) {
 }
 
 describe('ApiClient', () => {
-  it('getPersons requests GET /persons and parses JSON', async () => {
+  it('getPersons requests GET api/persons and parses JSON', async () => {
     const persons = [{ person_id: 'p1', name: 'Άννα' }]
     const fetchFn = fakeFetch(200, persons)
     const client = new ApiClient(BASE_URL, fetchFn as unknown as typeof fetch)
@@ -22,12 +22,12 @@ describe('ApiClient', () => {
 
     expect(result).toEqual(persons)
     expect(fetchFn).toHaveBeenCalledWith(
-      `${BASE_URL}/persons`,
+      `${BASE_URL}/api/persons`,
       expect.objectContaining({ headers: expect.objectContaining({ 'Content-Type': 'application/json' }) }),
     )
   })
 
-  it('getPeriods requests GET /persons/{id}/periods with encoded id', async () => {
+  it('getPeriods requests GET api/persons/{id}/periods with encoded id', async () => {
     const periods = ['2024-Q1', '2024-Q2']
     const fetchFn = fakeFetch(200, periods)
     const client = new ApiClient(BASE_URL, fetchFn as unknown as typeof fetch)
@@ -35,7 +35,7 @@ describe('ApiClient', () => {
     const result = await client.getPeriods('p 1')
 
     expect(result).toEqual(periods)
-    expect(fetchFn).toHaveBeenCalledWith(`${BASE_URL}/persons/p%201/periods`, expect.anything())
+    expect(fetchFn).toHaveBeenCalledWith(`${BASE_URL}/api/persons/p%201/periods`, expect.anything())
   })
 
   it('queryStructured POSTs the exact request body to /query/structured', async () => {
@@ -48,7 +48,7 @@ describe('ApiClient', () => {
 
     expect(result).toEqual(response)
     const [url, init] = fetchFn.mock.calls[0]
-    expect(url).toBe(`${BASE_URL}/query/structured`)
+    expect(url).toBe(`${BASE_URL}/api/query/structured`)
     expect(init?.method).toBe('POST')
     expect(JSON.parse(init?.body as string)).toEqual(req)
   })
@@ -66,7 +66,7 @@ describe('ApiClient', () => {
 
     expect(result).toEqual(response)
     const [url, init] = fetchFn.mock.calls[0]
-    expect(url).toBe(`${BASE_URL}/query/semantic`)
+    expect(url).toBe(`${BASE_URL}/api/query/semantic`)
     expect(init?.method).toBe('POST')
     expect(JSON.parse(init?.body as string)).toEqual(req)
   })
@@ -79,7 +79,7 @@ describe('ApiClient', () => {
     const result = await client.getHealth()
 
     expect(result).toEqual(health)
-    expect(fetchFn).toHaveBeenCalledWith(`${BASE_URL}/health`, expect.anything())
+    expect(fetchFn).toHaveBeenCalledWith(`${BASE_URL}/api/health`, expect.anything())
   })
 
   it('maps a 400 response to ApiError with the backend detail', async () => {
@@ -126,5 +126,69 @@ describe('ApiClient', () => {
     await expect(client.getHealth()).resolves.toEqual({ status: 'ok', ollama_reachable: true })
 
     vi.unstubAllGlobals()
+  })
+
+  it('uses a RELATIVE api/ path (no leading slash) by default, so it resolves under any subpath', async () => {
+    const fetchFn = fakeFetch(200, { status: 'ok', ollama_reachable: true })
+    const client = new ApiClient(undefined, fetchFn as unknown as typeof fetch)
+
+    await client.getHealth()
+
+    expect(fetchFn.mock.calls[0][0]).toBe('api/health')
+  })
+
+  it("sends credentials: 'same-origin' on every request", async () => {
+    const fetchFn = fakeFetch(200, [])
+    const client = new ApiClient(BASE_URL, fetchFn as unknown as typeof fetch)
+
+    await client.getPersons()
+    await client.login('alice', 'synthetic-pass')
+
+    for (const [, init] of fetchFn.mock.calls) {
+      expect(init?.credentials).toBe('same-origin')
+    }
+  })
+
+  it('calls the unauthorized handler on 401 and still rejects', async () => {
+    const fetchFn = fakeFetch(401, { detail: 'Απαιτείται σύνδεση.' })
+    const client = new ApiClient(BASE_URL, fetchFn as unknown as typeof fetch)
+    const onUnauthorized = vi.fn()
+    client.setUnauthorizedHandler(onUnauthorized)
+
+    await expect(client.getPersons()).rejects.toMatchObject({ status: 401 })
+    expect(onUnauthorized).toHaveBeenCalledTimes(1)
+  })
+
+  it('does NOT call the unauthorized handler for a failed login (wrong credentials)', async () => {
+    const fetchFn = fakeFetch(401, { detail: 'Λάθος όνομα χρήστη ή κωδικός.' })
+    const client = new ApiClient(BASE_URL, fetchFn as unknown as typeof fetch)
+    const onUnauthorized = vi.fn()
+    client.setUnauthorizedHandler(onUnauthorized)
+
+    await expect(client.login('alice', 'wrong')).rejects.toMatchObject({
+      status: 401,
+      detail: 'Λάθος όνομα χρήστη ή κωδικός.',
+    })
+    expect(onUnauthorized).not.toHaveBeenCalled()
+  })
+
+  it('login POSTs the credentials to api/auth/login', async () => {
+    const me = { id: 1, username: 'alice', role: 'user', must_change_pw: false }
+    const fetchFn = fakeFetch(200, me)
+    const client = new ApiClient(BASE_URL, fetchFn as unknown as typeof fetch)
+
+    await expect(client.login('alice', 'synthetic-pass')).resolves.toEqual(me)
+    const [url, init] = fetchFn.mock.calls[0]
+    expect(url).toBe(`${BASE_URL}/api/auth/login`)
+    expect(init?.method).toBe('POST')
+    expect(JSON.parse(init?.body as string)).toEqual({ username: 'alice', password: 'synthetic-pass' })
+  })
+
+  it('resolves 204 responses (logout) without parsing a body', async () => {
+    const fetchFn = vi.fn(async (_url: string, _init?: RequestInit) => new Response(null, { status: 204 }))
+    const client = new ApiClient(BASE_URL, fetchFn as unknown as typeof fetch)
+
+    await expect(client.logout()).resolves.toBeUndefined()
+    expect(fetchFn.mock.calls[0][0]).toBe(`${BASE_URL}/api/auth/logout`)
   })
 })

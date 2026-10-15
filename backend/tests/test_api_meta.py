@@ -1,4 +1,4 @@
-"""Mini test/sample flow για /persons, /persons/{id}/periods, /health (Φάση 4).
+"""Mini test/sample flow για /api/persons, /api/persons/{id}/periods, /api/health.
 
 Εκτελείται standalone: `python tests/test_api_meta.py`
 """
@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fastapi.testclient import TestClient  # noqa: E402
+from auth_helpers import logged_in_client, new_client  # noqa: E402
 
 from app.api.main import app  # noqa: E402
 from app.core.config import Settings, get_settings  # noqa: E402
@@ -75,9 +75,9 @@ def test_list_persons():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
-        response = client.get("/persons")
+        response = client.get("/api/persons")
 
         assert response.status_code == 200
         person_ids = {p["person_id"] for p in response.json()}
@@ -91,9 +91,9 @@ def test_list_periods_for_person():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
-        response = client.get("/persons/p1/periods")
+        response = client.get("/api/persons/p1/periods")
 
         assert response.status_code == 200
         assert response.json() == [_entry(2024).period, _entry(2025).period]
@@ -107,9 +107,9 @@ def test_health_reports_ollama_unreachable_on_dead_port():
     try:
         # port 1 δεν έχει listener -> connection refused, γρήγορο fail
         _override_settings(db_path, ollama_url="http://127.0.0.1:1")
-        client = TestClient(app)
+        client = new_client(app)
 
-        response = client.get("/health")
+        response = client.get("/api/health")
 
         assert response.status_code == 200
         body = response.json()

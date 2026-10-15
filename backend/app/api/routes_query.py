@@ -13,7 +13,7 @@ import json
 import logging
 import sqlite3
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends
 
 from app.api.deps import get_db, get_semantic_retriever
 from app.api.schemas import (
@@ -22,6 +22,7 @@ from app.api.schemas import (
     StructuredQueryRequest,
     StructuredQueryResponse,
 )
+from app.auth.deps import SessionUser, require_user
 from app.core.audit import AuditEntry, write_audit
 from app.core.exceptions import InvalidPeriodError
 from app.models.evaluation import CAREER_PERIOD
@@ -74,7 +75,7 @@ def _audit(
 def query_structured(
     request: StructuredQueryRequest,
     conn: sqlite3.Connection = Depends(get_db),
-    x_user: str = Header(default="anonymous", alias="X-User"),
+    user: SessionUser = Depends(require_user),
 ) -> StructuredQueryResponse:
     doc_ids: list[str] = []
     try:
@@ -104,7 +105,7 @@ def query_structured(
     except Exception as exc:
         if not doc_ids:
             doc_ids = getattr(exc, "retrieved_doc_ids", []) or []
-        _audit(conn, x_user, request.model_dump_json(), doc_ids, "structured")
+        _audit(conn, user.username, request.model_dump_json(), doc_ids, "structured")
         raise
 
     try:
@@ -113,7 +114,7 @@ def query_structured(
         # Fail safe: το audit record έχει προτεραιότητα έναντι του answer_text.
         logger.warning("Αποτυχία serialization του result.data για audit", exc_info=True)
         answer_text = None
-    audit_id = _audit(conn, x_user, request.model_dump_json(), doc_ids, "structured", answer_text=answer_text)
+    audit_id = _audit(conn, user.username, request.model_dump_json(), doc_ids, "structured", answer_text=answer_text)
     return StructuredQueryResponse(result=result, audit_id=audit_id)
 
 
@@ -122,7 +123,7 @@ def query_semantic(
     request: SemanticQueryRequest,
     conn: sqlite3.Connection = Depends(get_db),
     retriever: SemanticRetriever = Depends(get_semantic_retriever),
-    x_user: str = Header(default="anonymous", alias="X-User"),
+    user: SessionUser = Depends(require_user),
 ) -> SemanticQueryResponse:
     doc_ids: list[str] = []
     refusal: PrecheckRefusal | None = None
@@ -141,12 +142,12 @@ def query_semantic(
             doc_ids = result.retrieved_doc_ids
     except InvalidPeriodError:
         # Λάθος αιτήματος πριν από οποιαδήποτε ανάκτηση ή prompt.
-        _audit(conn, x_user, request.question, [], "semantic")
+        _audit(conn, user.username, request.question, [], "semantic")
         raise
     except Exception as exc:
         if not doc_ids:
             doc_ids = getattr(exc, "retrieved_doc_ids", []) or []
-        _audit(conn, x_user, request.question, doc_ids, "semantic", retriever.prompt_version)
+        _audit(conn, user.username, request.question, doc_ids, "semantic", retriever.prompt_version)
         raise
 
     if refusal is not None:
@@ -155,7 +156,7 @@ def query_semantic(
         # refusal_reason = ο κωδικός άρνησης.
         audit_id = _audit(
             conn,
-            x_user,
+            user.username,
             request.question,
             [],
             "semantic",
@@ -173,7 +174,7 @@ def query_semantic(
 
     audit_id = _audit(
         conn,
-        x_user,
+        user.username,
         request.question,
         doc_ids,
         "semantic",

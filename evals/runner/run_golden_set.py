@@ -4,12 +4,18 @@ Standalone script, not pytest (pytest is not installed in this repo).
 Spec: private/prompts/eval_runner.md, eval_runner_amend.md, eval_runner_amend2.md.
 
 Usage:
-python evals/runner/run_golden_set.py --questions private/golden_set/questions.jsonl --base-url http://127.0.0.1:8000 --tier A
+EVALASSIST_USER=... EVALASSIST_PASSWORD=... python evals/runner/run_golden_set.py --questions private/golden_set/questions.jsonl --base-url http://127.0.0.1:8000 --tier A
+
+The API requires a session. Credentials come ONLY from the environment
+variables EVALASSIST_USER / EVALASSIST_PASSWORD, never from the command line
+(it would end up in shell history and process listings). Missing variables
+or a failed login stop the run before any question is sent.
 """
 
 import argparse
 import csv
 import json
+import os
 import re
 import sys
 from datetime import datetime
@@ -42,6 +48,40 @@ TIER_A_MAP = {
 }
 
 ALL_STATUSES = ["PASS", "FAIL", "NOT_IMPLEMENTED", "ERROR", "KNOWN_GAP", "MANUAL_REVIEW"]
+
+SESSION_COOKIE = "evalassist_session"
+
+
+def read_credentials():
+    user = os.environ.get("EVALASSIST_USER", "")
+    password = os.environ.get("EVALASSIST_PASSWORD", "")
+    missing = [name for name, value in (("EVALASSIST_USER", user), ("EVALASSIST_PASSWORD", password)) if not value]
+    if missing:
+        return None, missing
+    return (user, password), []
+
+
+def login(client, base_url, user, password, timeout):
+    """Returns None on success, otherwise an error message.
+
+    The session cookie is Secure, so httpx would not send it back over a
+    plain http --base-url. It is attached explicitly as a default header
+    instead, which works over both http and https."""
+    try:
+        resp = client.post(
+            f"{base_url}/api/auth/login", json={"username": user, "password": password}, timeout=timeout
+        )
+    except httpx.HTTPError as exc:
+        return f"login request failed: {exc}"
+    if resp.status_code != 200:
+        return f"login failed: HTTP {resp.status_code}"
+    if resp.json().get("must_change_pw"):
+        return "login ok, but the account must change its password first (log in once via the UI)"
+    token = resp.cookies.get(SESSION_COOKIE)
+    if not token:
+        return "login ok, but no session cookie in the response"
+    client.headers["Cookie"] = f"{SESSION_COOKIE}={token}"
+    return None
 
 
 def load_questions(path):
@@ -108,7 +148,7 @@ def run_tier_a(client, base_url, q, check_routing, timeout):
             row["period_ignored_by_operation"] = True
         payload = {"person_id": q["person_id"], "period": period_sent, "operation": mapping["operation"]}
         try:
-            resp = client.post(f"{base_url}/query/structured", json=payload, timeout=timeout)
+            resp = client.post(f"{base_url}/api/query/structured", json=payload, timeout=timeout)
         except httpx.HTTPError as exc:
             row["status"] = "ERROR"
             row["error"] = str(exc)
@@ -160,7 +200,7 @@ def _apply_check_routing(client, base_url, q, check_routing, row, timeout):
         row["routing_period_substituted"] = True
     payload = {"person_id": q["person_id"], "period": period, "question": q["question"]}
     try:
-        resp = client.post(f"{base_url}/query/semantic", json=payload, timeout=timeout)
+        resp = client.post(f"{base_url}/api/query/semantic", json=payload, timeout=timeout)
     except httpx.HTTPError as exc:
         row["routing_check"] = f"ERROR {exc}"
         return row
@@ -186,7 +226,7 @@ def _run_semantic(client, base_url, q, tier, csv_rows, timeout):
 
     payload = {"person_id": q["person_id"], "period": q["period"], "question": q["question"]}
     try:
-        resp = client.post(f"{base_url}/query/semantic", json=payload, timeout=timeout)
+        resp = client.post(f"{base_url}/api/query/semantic", json=payload, timeout=timeout)
     except httpx.HTTPError as exc:
         row["status"] = "ERROR"
         row["error"] = str(exc)
@@ -331,13 +371,28 @@ def main():
             print(f"STOP: {e}", file=sys.stderr)
         sys.exit(1)
 
-    out_dir = Path(args.out)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    credentials, missing = read_credentials()
+    if credentials is None:
+        print(
+            f"STOP: missing environment variable(s): {', '.join(missing)}. "
+            "The API requires login; set EVALASSIST_USER and EVALASSIST_PASSWORD "
+            "(never pass the password as a command-line argument).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     rows = []
     csv_rows = []
     with httpx.Client() as client:
+        login_error = login(client, args.base_url, *credentials, timeout=args.timeout)
+        if login_error:
+            print(f"STOP: {login_error}", file=sys.stderr)
+            sys.exit(1)
+
+        out_dir = Path(args.out)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
         for q in questions:
             if q["tier"] == "A":
                 row = run_tier_a(client, args.base_url, q, args.check_routing, args.timeout)
