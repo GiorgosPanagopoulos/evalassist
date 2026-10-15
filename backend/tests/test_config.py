@@ -33,7 +33,6 @@ def test_defaults_match_previous_hardcoded_values():
     assert settings.OLLAMA_KEEP_ALIVE == "30m"
     assert settings.TOP_K_RETRIEVE == 20
     assert settings.TOP_K_RERANK == 5
-    assert settings.ALLOWED_ORIGINS == ["http://localhost:5173"]
     assert settings.DB_PATH.name == "evalassist.db"
     assert settings.CHROMA_PATH.name == "chroma_db"
 

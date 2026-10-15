@@ -26,7 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fastapi.testclient import TestClient  # noqa: E402
+from auth_helpers import TEST_USERNAME, logged_in_client  # noqa: E402
 
 from app.api.main import app  # noqa: E402
 from app.core.config import Settings, get_settings  # noqa: E402
@@ -161,9 +161,9 @@ def test_timeline_returns_36_points_32_scored_4_null_all_sa():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
-        response = client.get(f"/person/{PERSON}/timeline")
+        response = client.get(f"/api/person/{PERSON}/timeline")
 
         assert response.status_code == 200, response.text
         body = response.json()
@@ -186,9 +186,9 @@ def test_timeline_writes_one_audit_row_with_structured_mode():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
-        response = client.get(f"/person/{PERSON}/timeline", headers={"X-User": "tester"})
+        response = client.get(f"/api/person/{PERSON}/timeline")
         assert response.status_code == 200
 
         rows = _audit_rows(db_path)
@@ -196,7 +196,7 @@ def test_timeline_writes_one_audit_row_with_structured_mode():
         row = rows[0]
         assert row["id"] == response.json()["audit_id"]
         assert row["mode"] == "structured"
-        assert row["user"] == "tester"
+        assert row["user"] == TEST_USERNAME
         assert json.loads(row["retrieved_doc_ids"]) == [DOC_ID]
         assert json.loads(row["query"])["person_id"] == PERSON
         assert row["prompt_version"] is None
@@ -210,9 +210,9 @@ def test_other_person_never_gets_m01253_data():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
-        response = client.get(f"/person/{OTHER_PERSON}/timeline")
+        response = client.get(f"/api/person/{OTHER_PERSON}/timeline")
 
         assert response.status_code == 200
         body = response.json()
@@ -225,7 +225,7 @@ def test_other_person_never_gets_m01253_data():
         assert "2012-09-14..2012-12-31" not in response.text
 
         # Άγνωστο person_id: άδεια λίστα, όχι διαρροή — και πάλι audit row.
-        response = client.get("/person/Μ-00000/timeline")
+        response = client.get("/api/person/Μ-00000/timeline")
         assert response.status_code == 200
         assert response.json()["result"]["points"] == []
         assert response.json()["result"]["retrieved_doc_ids"] == []
@@ -240,9 +240,9 @@ def test_sa_points_never_take_value_from_neighbours():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
-        points = client.get(f"/person/{PERSON}/timeline").json()["result"]["points"]
+        points = client.get(f"/api/person/{PERSON}/timeline").json()["result"]["points"]
 
         sa_indices = [i for i, p in enumerate(points) if p["kind"] == "Σ.Α."]
         assert len(sa_indices) == 4
@@ -256,7 +256,7 @@ def test_sa_points_never_take_value_from_neighbours():
             assert points[i]["score"] not in (prev_score, next_score, (prev_score + next_score) / 2)
 
         # Το JSON έχει κυριολεκτικά null, όχι 0 ή "".
-        raw = client.get(f"/person/{PERSON}/timeline").text
+        raw = client.get(f"/api/person/{PERSON}/timeline").text
         assert '"score":null' in raw.replace(" ", "")
         assert '"score":0' not in raw.replace(" ", "")
         assert '"score":""' not in raw.replace(" ", "")
@@ -279,9 +279,9 @@ def test_multiple_documents_for_same_period_is_error_not_limit_1():
         conn.close()
 
         _override_settings(db_path)
-        client = TestClient(app)
+        client = logged_in_client(app, db_path)
 
-        response = client.get(f"/person/{PERSON}/timeline")
+        response = client.get(f"/api/person/{PERSON}/timeline")
 
         assert response.status_code == 400, response.text
         assert "2012-09-14..2012-12-31" in response.json()["detail"]
@@ -309,8 +309,8 @@ def test_real_db_m01253_if_present():
         # Deploy order is migrate first, then serve (python -m app.db.database).
         init_db(db_path)
         _override_settings(db_path)
-        client = TestClient(app)
-        response = client.get(f"/person/{PERSON}/timeline")
+        client = logged_in_client(app, db_path)
+        response = client.get(f"/api/person/{PERSON}/timeline")
         assert response.status_code == 200, response.text
         _assert_m01253_shape(response.json()["result"]["points"])
     finally:

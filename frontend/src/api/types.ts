@@ -97,3 +97,31 @@ export interface TimelineResponse {
   result: TimelineResult
   audit_id: number
 }
+
+// --- auth / admin (mirrors backend/app/api/schemas.py) ---
+
+export type UserRole = 'admin' | 'user'
+
+export interface Me {
+  id: number
+  username: string
+  role: UserRole
+  must_change_pw: boolean
+}
+
+export interface UserOut {
+  id: number
+  username: string
+  role: UserRole
+  is_active: boolean
+  must_change_pw: boolean
+  locked: boolean
+  created_at: string
+}
+
+export interface CreatedUser {
+  id: number
+  username: string
+  role: UserRole
+  temp_password: string
+}

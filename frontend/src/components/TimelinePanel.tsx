@@ -76,7 +76,7 @@ export function TimelinePanel({ api }: TimelinePanelProps) {
         <div className="flex flex-col gap-1">
           <span className={LABEL_CLASS}>Χρονογραμμή βαθμολογίας</span>
           <span className="font-mono text-[11px]" style={{ color: '#6d6d78' }}>
-            structured · χωρίς LLM · GET /person/{'{person_id}'}/timeline
+            structured · χωρίς LLM · GET /api/person/{'{person_id}'}/timeline
           </span>
         </div>
         <label className="flex items-center gap-2">

@@ -36,7 +36,13 @@ class Settings(BaseSettings):
     OLLAMA_KEEP_ALIVE: str = "30m"
     TOP_K_RETRIEVE: int = 20
     TOP_K_RERANK: int = 5
-    ALLOWED_ORIGINS: list[str] = ["http://localhost:5173"]
+    # Session cookie (βλ. app.auth). Frontend και API είναι same-origin (Vite
+    # dev proxy τοπικά, portal στην παραγωγή), άρα κανένα CORS.
+    COOKIE_SECURE: bool = True
+    SESSION_HOURS: int = 8
+    COOKIE_PATH: str = "/"
+    # /docs, /redoc, /openapi.json: κλειστά εκτός αν ζητηθούν ρητά.
+    ENABLE_DOCS: bool = False
 
     @property
     def resolved_gen_model(self) -> str:
