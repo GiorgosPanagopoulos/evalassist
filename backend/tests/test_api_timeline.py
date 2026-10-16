@@ -201,6 +201,10 @@ def test_timeline_writes_one_audit_row_with_structured_mode():
         assert json.loads(row["query"])["person_id"] == PERSON
         assert row["prompt_version"] is None
         assert len(json.loads(row["answer_text"])) == 36
+        # Όλες οι περίοδοι, χωρίς φίλτρο: "all", όχι NULL και όχι "career".
+        assert row["person_id"] == PERSON
+        assert row["period"] == "all"
+        assert row["other_period"] is None
     finally:
         _clear_overrides()
         os.remove(db_path)
@@ -290,6 +294,8 @@ def test_multiple_documents_for_same_period_is_error_not_limit_1():
         assert len(rows) == 1
         assert rows[0]["mode"] == "structured"
         assert json.loads(rows[0]["retrieved_doc_ids"]) == []
+        assert rows[0]["person_id"] == PERSON
+        assert rows[0]["period"] == "all"
     finally:
         _clear_overrides()
         os.remove(db_path)
@@ -313,6 +319,21 @@ def test_real_db_m01253_if_present():
         response = client.get(f"/api/person/{PERSON}/timeline")
         assert response.status_code == 200, response.text
         _assert_m01253_shape(response.json()["result"]["points"])
+        # Το migration έτρεξε στο αντίγραφο της πραγματικής ΒΔ: η νέα γραμμή
+        # έχει scope, οι παλιές μένουν NULL.
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT * FROM audit_log WHERE id = ?", (response.json()["audit_id"],)
+        ).fetchone()
+        old_with_scope = conn.execute(
+            "SELECT COUNT(*) FROM audit_log WHERE id < ? AND "
+            "(person_id IS NOT NULL OR period IS NOT NULL OR other_period IS NOT NULL)",
+            (row["id"],),
+        ).fetchone()[0]
+        conn.close()
+        assert (row["person_id"], row["period"], row["other_period"]) == (PERSON, "all", None)
+        assert old_with_scope == 0
     finally:
         _clear_overrides()
         os.remove(db_path)

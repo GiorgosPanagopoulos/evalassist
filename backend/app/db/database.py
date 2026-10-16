@@ -32,6 +32,11 @@ def _migrate_audit_log(conn: sqlite3.Connection) -> None:
     # append-only triggers δεν ενεργοποιούνται) και τα triggers μένουν ανέγγιχτα.
     if columns and "refusal_reason" not in columns:
         conn.execute("ALTER TABLE audit_log ADD COLUMN refusal_reason TEXT")
+    # Ίδιο μοτίβο: το scope (person_id/period/other_period) κάθε κλήσης. Οι
+    # παλιές γραμμές μένουν NULL, χωρίς backfill.
+    for column in ("person_id", "period", "other_period"):
+        if columns and column not in columns:
+            conn.execute(f"ALTER TABLE audit_log ADD COLUMN {column} TEXT")
 
 
 def _migrate_service_time_check(conn: sqlite3.Connection) -> None:

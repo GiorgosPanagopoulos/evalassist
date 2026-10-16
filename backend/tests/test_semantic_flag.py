@@ -133,6 +133,9 @@ def test_disabled_is_403_with_audit_and_factory_never_called(db_path):
     assert row["user"] == TEST_USERNAME
     assert row["query"] == QUESTION
     assert row["prompt_version"] is None and row["answer_text"] is None
+    assert row["person_id"] == "p1"
+    assert row["period"] == PERIOD
+    assert row["other_period"] is None
 
 
 @_with_db(enabled=False)
@@ -159,7 +162,12 @@ def test_disabled_refuses_before_validation_of_scope(db_path):
     )
     assert response.status_code == 403
     assert probe.calls == 0
-    assert [r["refusal_reason"] for r in _audit_rows(db_path)] == ["semantic_disabled"]
+    rows = _audit_rows(db_path)
+    assert [r["refusal_reason"] for r in rows] == ["semantic_disabled"]
+    # Πριν από οποιοδήποτε scope: γράφεται το raw request, ανεπικύρωτο.
+    assert rows[0]["person_id"] == "nobody"
+    assert rows[0]["period"] == "1999-01-01..1999-12-31"
+    assert rows[0]["other_period"] is None
 
 
 @_with_db(enabled=True)
