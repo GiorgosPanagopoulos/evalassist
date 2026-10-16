@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Citation } from '../api/types'
-import { CitationBadge } from './CitationBadge'
+import { CitationList } from './CitationBadge'
 import { EmptyState } from './EmptyState'
 import { ReviewBanner } from './ReviewBanner'
 import { RoutingHintBanner } from './RoutingHintBanner'
@@ -64,17 +64,7 @@ export function SemanticAnswer({ answer, citations, auditId, routingHint, refusa
         </p>
       )}
 
-      <div data-testid="citations" className="flex flex-wrap gap-2">
-        {citations.length === 0 ? (
-          <span className="text-xs" style={{ color: '#8b8b95' }}>
-            Καμία παραπομπή
-          </span>
-        ) : (
-          citations.map((citation, idx) => (
-            <CitationBadge key={`${citation.doc_id}-${citation.page}-${idx}`} citation={citation} />
-          ))
-        )}
-      </div>
+      <CitationList citations={citations} />
 
       <p className="font-mono text-xs" style={{ color: '#8b8b95' }}>
         Καταχώρηση ελέγχου: #{auditId}

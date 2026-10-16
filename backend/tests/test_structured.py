@@ -3,7 +3,7 @@
 
 Καλύπτει, πάνω σε in-memory SQLite fixture:
   - get_scores: lookup evaluation entry ανά person_id/period + field_scores +
-    sources/retrieved_doc_ids.
+    citations/retrieved_doc_ids.
   - compare_periods: σύγκριση δύο περιόδων του ίδιου ατόμου.
   - top_bottom_sections: top/bottom N αναλυτικά πεδία (field_scores) βάσει τιμής,
     με το ολιστικό πεδίο 141 εκτός κατάταξης και ξεχωριστά ως `overall`.
@@ -118,7 +118,7 @@ def _seed_person(
     conn.commit()
 
 
-def test_get_scores_returns_entry_field_scores_sources_and_doc_ids():
+def test_get_scores_returns_entry_field_scores_citations_and_doc_ids():
     conn = _make_conn()
     entry = _make_entry("2025-01-01", 96, [("141", 96), ("91", 95), ("142α", "ΝΑΙ")])
     _seed_person(conn, "p1", entry, "doc1")
@@ -134,7 +134,9 @@ def test_get_scores_returns_entry_field_scores_sources_and_doc_ids():
         ("142α", "ΝΑΙ"),
     }
     assert result.retrieved_doc_ids == ["doc1"]
-    assert all(src["doc_id"] == "doc1" for src in result.sources)
+    assert [c.model_dump() for c in result.citations] == [
+        {"doc_id": "doc1", "page": 8, "section": "ΣΥΝΟΛΙΚΗ ΕΜΦΑΝΙΣΗ - ΧΑΡΑΚΤΗΡΙΣΜΟΣ"}
+    ]
 
 
 def test_get_scores_empty_result_is_not_an_exception():
@@ -142,7 +144,7 @@ def test_get_scores_empty_result_is_not_an_exception():
     result = get_scores(conn, IsolationScope(person_id="missing", period="2025-01-01..2025-12-31"))
 
     assert result.data == {}
-    assert result.sources == []
+    assert result.citations == []
     assert result.retrieved_doc_ids == []
 
 
@@ -158,6 +160,7 @@ def test_compare_periods():
     assert result.data["entry_a"]["score"] == 80
     assert result.data["entry_b"]["score"] == 95
     assert set(result.retrieved_doc_ids) == {"doc-2024", "doc-2025"}
+    assert [(c.doc_id, c.page) for c in result.citations] == [("doc-2024", 8), ("doc-2025", 8)]
 
 
 def test_top_bottom_sections_ranks_numeric_field_scores():
@@ -268,7 +271,9 @@ def test_get_promotions_table_judged_for_chain():
         assert rows[1]["judged_for"] == "ΥΠΟΠΛΟΙΑΡΧΟΣ"
         assert rows[2]["judged_for"] == "ΑΝΘΥΠΟΠΛΟΙΑΡΧΟΣ"
         assert result.retrieved_doc_ids == ["doc-career"]
-        assert all(src["section"] == "ΚΡΙΣΕΙΣ ΠΡΟΑΓΩΓΩΝ" for src in result.sources)
+        assert [c.model_dump() for c in result.citations] == [
+            {"doc_id": "doc-career", "page": None, "section": "ΚΡΙΣΕΙΣ ΠΡΟΑΓΩΓΩΝ"}
+        ]
     finally:
         db_path.unlink(missing_ok=True)
 
@@ -282,7 +287,7 @@ def test_get_promotions_table_empty_result_is_not_an_exception():
         conn.close()
 
         assert result.data["rows"] == []
-        assert result.sources == []
+        assert result.citations == []
         assert result.retrieved_doc_ids == []
     finally:
         db_path.unlink(missing_ok=True)
@@ -312,7 +317,7 @@ def test_get_promotions_table_isolation_scope_no_cross_person_leak():
         db_path.unlink(missing_ok=True)
 
 
-def test_get_service_time_table_rows_and_sources():
+def test_get_service_time_table_rows_and_citations():
     db_path = _make_temp_db()
     try:
         conn = sqlite3.connect(db_path)
@@ -334,7 +339,9 @@ def test_get_service_time_table_rows_and_sources():
             "months": 0,
             "days": 10,
         }
-        assert all(src["section"] == "ΣΥΝΟΛΙΚΟΣ ΧΡΟΝΟΣ ΥΠΗΡΕΣΙΑΣ" for src in result.sources)
+        assert [c.model_dump() for c in result.citations] == [
+            {"doc_id": "doc-career", "page": None, "section": "ΣΥΝΟΛΙΚΟΣ ΧΡΟΝΟΣ ΥΠΗΡΕΣΙΑΣ"}
+        ]
         assert result.retrieved_doc_ids == ["doc-career"]
     finally:
         db_path.unlink(missing_ok=True)
@@ -349,15 +356,139 @@ def test_get_service_time_table_empty_result_is_not_an_exception():
         conn.close()
 
         assert result.data["rows"] == []
-        assert result.sources == []
+        assert result.citations == []
         assert result.retrieved_doc_ids == []
     finally:
         db_path.unlink(missing_ok=True)
 
 
+# --- citations: doc_id/page/section μόνο από τη DB ----------------------------
+
+
+def _seed_entry_with_page(
+    conn, person_id: str, start: str, doc_id: str, page: int
+) -> EvaluationEntry:
+    entry = _make_entry(start, 90, [("141", 90), ("91", 80), ("93", 70)])
+    entry.source_page = page
+    _seed_person(conn, person_id, entry, doc_id)
+    return entry
+
+
+def test_citations_page_comes_from_source_page_per_operation():
+    """POSITIVE: γνωστές τιμές στη DB (διαφορετική σελίδα ανά περίοδο) ->
+    ακριβώς αυτές στα citations κάθε period-scoped operation."""
+    conn = _make_conn()
+    a = _seed_entry_with_page(conn, "p1", "2012-01-01", "doc-a", 7)
+    b = _seed_entry_with_page(conn, "p1", "2013-01-01", "doc-b", 5)
+
+    scores = get_scores(conn, IsolationScope(person_id="p1", period=a.period))
+    assert [(c.doc_id, c.page) for c in scores.citations] == [("doc-a", 7)]
+
+    top_bottom = top_bottom_sections(conn, IsolationScope(person_id="p1", period=b.period))
+    assert [(c.doc_id, c.page) for c in top_bottom.citations] == [("doc-b", 5)]
+
+    compared = compare_periods(conn, "p1", b.period, a.period)
+    assert [(c.doc_id, c.page) for c in compared.citations] == [("doc-b", 5), ("doc-a", 7)]
+
+
+def test_null_source_page_stays_null_in_citation():
+    """NEGATIVE: source_page NULL στη DB -> page None, όχι 0 ούτε εικασία."""
+    conn = _make_conn()
+    entry = _seed_entry_with_page(conn, "p1", "2012-01-01", "doc-a", 7)
+    conn.execute("UPDATE evaluations SET source_page = NULL WHERE person_id = 'p1'")
+    conn.commit()
+
+    result = get_scores(conn, IsolationScope(person_id="p1", period=entry.period))
+
+    assert [(c.doc_id, c.page) for c in result.citations] == [("doc-a", None)]
+
+
+def _insert_duplicate_document(conn, person_id: str, period: str) -> None:
+    # Δεύτερο έγγραφο για ίδιο (person_id, period) — το PK είναι (doc_id, period).
+    conn.execute(
+        "INSERT INTO documents (doc_id, person_id, period, path, page_count) "
+        "VALUES ('duplicate-doc', ?, ?, '/docs/dup.pdf', 1)",
+        (person_id, period),
+    )
+    conn.commit()
+
+
+def _assert_value_error(fn, *needles: str) -> None:
+    try:
+        fn()
+    except ValueError as exc:
+        for needle in needles:
+            assert needle in str(exc), str(exc)
+    else:
+        raise AssertionError("αναμενόταν ValueError, όχι σιωπηλό LIMIT 1")
+
+
+def test_multiple_documents_for_same_period_is_error_not_limit_1():
+    conn = _make_conn()
+    entry = _seed_entry_with_page(conn, "p1", "2012-01-01", "doc-a", 7)
+    other = _seed_entry_with_page(conn, "p1", "2013-01-01", "doc-b", 5)
+    _insert_duplicate_document(conn, "p1", entry.period)
+    repository.replace_promotions(conn, "p1", _PROMOTION_ROWS)
+    repository.replace_service_time(conn, "p1", _SERVICE_TIME_ROWS)
+    repository.upsert_document(conn, "doc-a", "p1", CAREER_PERIOD, "/docs/doc-a.pdf", 8)
+    _insert_duplicate_document(conn, "p1", CAREER_PERIOD)
+
+    scope = IsolationScope(person_id="p1", period=entry.period)
+    career = IsolationScope(person_id="p1", period=CAREER_PERIOD)
+    _assert_value_error(lambda: get_scores(conn, scope), entry.period, "doc-a", "duplicate-doc")
+    _assert_value_error(lambda: top_bottom_sections(conn, scope), entry.period)
+    _assert_value_error(
+        lambda: compare_periods(conn, "p1", other.period, entry.period), entry.period
+    )
+    _assert_value_error(lambda: get_promotions_table(conn, career), CAREER_PERIOD)
+    _assert_value_error(lambda: get_service_time_table(conn, career), CAREER_PERIOD)
+
+    # Το διπλό έγγραφο μιας ΑΛΛΗΣ περιόδου δεν μπλοκάρει την ερώτηση αυτής.
+    unaffected = get_scores(conn, IsolationScope(person_id="p1", period=other.period))
+    assert [(c.doc_id, c.page) for c in unaffected.citations] == [("doc-b", 5)]
+
+
+def test_data_without_document_is_error_not_uncited():
+    """Δεδομένα χωρίς έγγραφο στο scope δεν έχουν προέλευση: σφάλμα, ποτέ
+    απάντηση χωρίς citation."""
+    conn = _make_conn()
+    repository.upsert_person(conn, "p1", "Παπαδόπουλος Γιώργος")
+    repository.replace_promotions(conn, "p1", _PROMOTION_ROWS)
+    conn.commit()
+
+    _assert_value_error(
+        lambda: get_promotions_table(conn, IsolationScope(person_id="p1", period=CAREER_PERIOD)),
+        "Κανένα έγγραφο",
+    )
+
+
+def test_citations_only_contain_requested_person_doc_ids():
+    conn = _make_conn()
+    entry = _seed_entry_with_page(conn, "p1", "2012-01-01", "doc-p1", 7)
+    _seed_entry_with_page(conn, "p2", "2012-01-01", "doc-p2", 3)
+    for person_id, doc_id in (("p1", "doc-p1"), ("p2", "doc-p2")):
+        repository.replace_promotions(conn, person_id, _PROMOTION_ROWS)
+        repository.replace_service_time(conn, person_id, _SERVICE_TIME_ROWS)
+        repository.upsert_document(conn, doc_id, person_id, CAREER_PERIOD, f"/docs/{doc_id}.pdf", 8)
+    conn.commit()
+
+    scope = IsolationScope(person_id="p1", period=entry.period)
+    career = IsolationScope(person_id="p1", period=CAREER_PERIOD)
+    results = [
+        get_scores(conn, scope),
+        top_bottom_sections(conn, scope),
+        compare_periods(conn, "p1", entry.period, entry.period),
+        get_promotions_table(conn, career),
+        get_service_time_table(conn, career),
+    ]
+    for result in results:
+        assert result.citations
+        assert {c.doc_id for c in result.citations} == {"doc-p1"}
+
+
 def run_all():
     tests = [
-        test_get_scores_returns_entry_field_scores_sources_and_doc_ids,
+        test_get_scores_returns_entry_field_scores_citations_and_doc_ids,
         test_get_scores_empty_result_is_not_an_exception,
         test_compare_periods,
         test_top_bottom_sections_ranks_numeric_field_scores,
@@ -367,8 +498,13 @@ def run_all():
         test_get_promotions_table_judged_for_chain,
         test_get_promotions_table_empty_result_is_not_an_exception,
         test_get_promotions_table_isolation_scope_no_cross_person_leak,
-        test_get_service_time_table_rows_and_sources,
+        test_get_service_time_table_rows_and_citations,
         test_get_service_time_table_empty_result_is_not_an_exception,
+        test_citations_page_comes_from_source_page_per_operation,
+        test_null_source_page_stays_null_in_citation,
+        test_multiple_documents_for_same_period_is_error_not_limit_1,
+        test_data_without_document_is_error_not_uncited,
+        test_citations_only_contain_requested_person_doc_ids,
     ]
     for test in tests:
         test()

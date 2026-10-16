@@ -15,6 +15,7 @@ persons x 1 evaluation period seeded):
 
 import json
 import os
+import shutil
 import sqlite3
 import sys
 import tempfile
@@ -38,6 +39,7 @@ from app.models.evaluation import (  # noqa: E402
 )
 
 PERIOD = "2025-01-01..2025-12-31"
+REAL_DB = Path(__file__).resolve().parents[1] / "data" / "evalassist.db"
 OTHER_PERIOD = "2024-01-01..2024-12-31"
 
 _PROMOTION_ROWS = [
@@ -135,6 +137,10 @@ def test_get_scores_scoped_to_person_and_period():
         assert body["result"]["data"]["characterization"] == "ΕΞΑΙΡΕΤΟΣ"
         assert body["result"]["data"]["score"] == 96
         assert body["result"]["retrieved_doc_ids"] == ["doc-p1"]
+        assert body["result"]["citations"] == [
+            {"doc_id": "doc-p1", "page": 8, "section": "ΣΥΝΟΛΙΚΗ ΕΜΦΑΝΙΣΗ - ΧΑΡΑΚΤΗΡΙΣΜΟΣ"}
+        ]
+        assert "sources" not in body["result"]
         assert isinstance(body["audit_id"], int)
     finally:
         _clear_overrides()
@@ -220,6 +226,10 @@ def test_get_promotions_table_returns_judged_for_and_career_doc_ids():
         assert rows[0]["judged_for"] is None
         assert rows[1]["judged_for"] == "ΥΠΟΠΛΟΙΑΡΧΟΣ"
         assert body["result"]["retrieved_doc_ids"] == ["doc-p1-career"]
+        # Ο πίνακας promotions δεν έχει στήλη σελίδας: page null, ποτέ εικασία.
+        assert body["result"]["citations"] == [
+            {"doc_id": "doc-p1-career", "page": None, "section": "ΚΡΙΣΕΙΣ ΠΡΟΑΓΩΓΩΝ"}
+        ]
         # career-wide: το doc-p1 (scoped στο evaluation period) δεν εμφανίζεται εδώ
         assert "doc-p1" not in body["result"]["retrieved_doc_ids"]
     finally:
@@ -408,6 +418,70 @@ def test_compare_periods_audits_both_periods():
         os.remove(db_path)
 
 
+def test_multiple_documents_for_same_period_is_400_with_audit_not_limit_1():
+    db_path = _make_temp_db()
+    try:
+        conn = sqlite3.connect(db_path)
+        # Δεύτερο έγγραφο για ίδιο (person_id, period) — το PK είναι (doc_id, period).
+        conn.execute(
+            "INSERT INTO documents (doc_id, person_id, period, path, page_count) "
+            "VALUES ('duplicate-doc', 'p1', ?, '/docs/dup.pdf', 1)",
+            (PERIOD,),
+        )
+        conn.commit()
+        conn.close()
+
+        _override_settings(db_path)
+        client = logged_in_client(app, db_path)
+
+        response = client.post(
+            "/api/query/structured",
+            json={"person_id": "p1", "period": PERIOD, "operation": "get_scores"},
+        )
+
+        assert response.status_code == 400, response.text
+        assert PERIOD in response.json()["detail"]
+        row = _last_audit_row(db_path)
+        assert row["mode"] == "structured"
+        assert json.loads(row["retrieved_doc_ids"]) == []
+        assert (row["person_id"], row["period"]) == ("p1", PERIOD)
+    finally:
+        _clear_overrides()
+        os.remove(db_path)
+
+
+def test_real_db_m01253_get_scores_citation_if_present():
+    """Ίδιο doc_id και σελίδα με το timeline για την ίδια περίοδο (σελ. 7)."""
+    if not REAL_DB.exists():
+        print(f"SKIP (no real DB at {REAL_DB})")
+        return
+    # Αντίγραφο: το endpoint γράφει audit_log.
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    db_path = Path(path)
+    shutil.copyfile(REAL_DB, db_path)
+    try:
+        init_db(db_path)
+        _override_settings(db_path)
+        client = logged_in_client(app, db_path)
+        person, period = "Μ-01253", "2012-09-14..2012-12-31"
+
+        response = client.post(
+            "/api/query/structured",
+            json={"person_id": person, "period": period, "operation": "get_scores"},
+        )
+        assert response.status_code == 200, response.text
+        citations = response.json()["result"]["citations"]
+
+        timeline = client.get(f"/api/person/{person}/timeline").json()["result"]["points"]
+        point = next(p for p in timeline if p["period"] == period)
+        assert [(c["doc_id"], c["page"]) for c in citations] == [(point["doc_id"], 7)]
+        assert point["page"] == 7
+    finally:
+        _clear_overrides()
+        os.remove(db_path)
+
+
 def run_all():
     tests = [
         test_get_scores_scoped_to_person_and_period,
@@ -422,6 +496,8 @@ def run_all():
         test_unknown_period_is_422_with_audit_for_period_scoped_operations,
         test_career_wide_operations_ignore_period_validation,
         test_compare_periods_audits_both_periods,
+        test_multiple_documents_for_same_period_is_400_with_audit_not_limit_1,
+        test_real_db_m01253_get_scores_citation_if_present,
     ]
     for test in tests:
         test()

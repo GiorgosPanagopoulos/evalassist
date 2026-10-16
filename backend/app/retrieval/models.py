@@ -22,10 +22,20 @@ class Citation(BaseModel):
     score: float  # reranker relevance score
 
 
+class StructuredCitation(BaseModel):
+    """Προέλευση μιας δομημένης απάντησης, μόνο από ό,τι υπάρχει ήδη στη DB.
+    page=None σημαίνει ότι η σελίδα δεν καταγράφηκε στη DB (π.χ. promotions,
+    service_time δεν έχουν στήλη σελίδας) — ποτέ εικασία."""
+
+    doc_id: str
+    page: int | None
+    section: str
+
+
 class StructuredResult(BaseModel):
     mode: RetrievalMode = RetrievalMode.STRUCTURED
     data: dict[str, Any]
-    sources: list[dict[str, str]]
+    citations: list[StructuredCitation]
     retrieved_doc_ids: list[str]
 
 

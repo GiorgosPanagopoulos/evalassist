@@ -32,12 +32,26 @@ const OPERATIONS: { value: StructuredOperation; label: string }[] = [
   { value: 'get_scores', label: 'Βαθμολογίες' },
   { value: 'compare_periods', label: 'Σύγκριση περιόδων' },
   { value: 'top_bottom_sections', label: 'Κορυφαίες / χαμηλότερες ενότητες' },
+  { value: 'get_promotions_table', label: 'Κρίσεις προαγωγών' },
+  { value: 'get_service_time_table', label: 'Συνολικός χρόνος υπηρεσίας' },
 ]
+
+// Career-wide: το backend αγνοεί το period και διαβάζει πάντα CAREER_PERIOD
+// (CAREER_WIDE_OPERATIONS στο backend/app/api/routes_query.py). Το period
+// είναι υποχρεωτικό στο request, οπότε στέλνεται η ίδια η σύμβαση 'career'.
+const CAREER_WIDE_OPERATIONS: readonly StructuredOperation[] = [
+  'get_promotions_table',
+  'get_service_time_table',
+]
+export const CAREER_PERIOD = 'career'
+export const CAREER_WIDE_TEXT = 'Αφορά όλη τη σταδιοδρομία'
 
 const MODE_LABELS: Record<StructuredOperation, string> = {
   get_scores: 'βαθμολογίες',
   compare_periods: 'σύγκριση περιόδων',
   top_bottom_sections: 'κορυφαίες / χαμηλότερες ενότητες',
+  get_promotions_table: 'κρίσεις προαγωγών',
+  get_service_time_table: 'συνολικός χρόνος υπηρεσίας',
 }
 
 const LABEL_CLASS = 'text-[11px] font-semibold uppercase tracking-[.6px] text-[#8b8b95]'
@@ -104,11 +118,13 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange, semanticE
     })
   }, [api, personId])
 
+  const careerWide = mode === 'structured' && CAREER_WIDE_OPERATIONS.includes(operation)
   const questionTooShort = mode === 'semantic' && question.trim().length < 3
   const compareMissingOtherPeriod =
     mode === 'structured' && operation === 'compare_periods' && !otherPeriod
 
-  const canSubmit = Boolean(personId) && Boolean(period) && !questionTooShort && !compareMissingOtherPeriod
+  const canSubmit =
+    Boolean(personId) && (careerWide || Boolean(period)) && !questionTooShort && !compareMissingOtherPeriod
 
   function handleOperationChange(next: StructuredOperation) {
     setOperation(next)
@@ -125,7 +141,7 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange, semanticE
       if (mode === 'structured') {
         const response = await api.queryStructured({
           person_id: personId,
-          period,
+          period: careerWide ? CAREER_PERIOD : period,
           operation,
           ...(operation === 'compare_periods' ? { other_period: otherPeriod } : {}),
           ...(operation === 'top_bottom_sections' && n ? { n: Number(n) } : {}),
@@ -223,6 +239,13 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange, semanticE
                 ))}
             </select>
           </label>
+        </div>
+      ) : careerWide ? (
+        <div className="flex flex-col gap-1.5">
+          <span className={LABEL_CLASS}>Περίοδος</span>
+          <p data-testid="career-wide-note" className="py-2.5 text-[13px]" style={{ color: '#8b8b95' }}>
+            {CAREER_WIDE_TEXT}
+          </p>
         </div>
       ) : (
         <label className="flex flex-col gap-1.5">

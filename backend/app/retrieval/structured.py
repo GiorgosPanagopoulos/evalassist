@@ -12,7 +12,7 @@ import sqlite3
 from app.db.repository import get_promotions, get_service_time
 from app.models.evaluation import KNOWN_SECTIONS
 from app.retrieval.isolation import IsolationScope
-from app.retrieval.models import StructuredResult
+from app.retrieval.models import StructuredCitation, StructuredResult
 
 _EVALUATION_SECTION = KNOWN_SECTIONS[-1]  # "ΣΥΝΟΛΙΚΗ ΕΜΦΑΝΙΣΗ - ΧΑΡΑΚΤΗΡΙΣΜΟΣ"
 _PROMOTIONS_SECTION = KNOWN_SECTIONS[0]  # "ΚΡΙΣΕΙΣ ΠΡΟΑΓΩΓΩΝ"
@@ -30,6 +30,33 @@ def _doc_ids_in_scope(conn: sqlite3.Connection, scope: IsolationScope) -> list[s
     where, params = scope.build_sql_where()
     rows = conn.execute(f"SELECT doc_id FROM documents WHERE {where}", params).fetchall()
     return [r["doc_id"] for r in rows]
+
+
+def _single_doc_id(conn: sqlite3.Connection, scope: IsolationScope) -> str | None:
+    """Το ένα doc_id του scope, ή None αν δεν υπάρχει. Ίδιος κανόνας με το
+    timeline (app.retrieval.timeline._doc_id_by_period): δύο ή περισσότερα
+    έγγραφα για (person_id, period) σημαίνουν διφορούμενη πηγή και είναι
+    σφάλμα — ποτέ σιωπηλό LIMIT 1. Ελέγχει μόνο το ζητούμενο period, όχι όλες
+    τις περιόδους του προσώπου."""
+    doc_ids = _doc_ids_in_scope(conn, scope)
+    if len(doc_ids) > 1:
+        raise ValueError(
+            f"Περισσότερα από ένα έγγραφα για person_id={scope.person_id!r} "
+            f"period={scope.period!r}: {', '.join(repr(d) for d in doc_ids)}"
+        )
+    return doc_ids[0] if doc_ids else None
+
+
+def _citations(
+    scope: IsolationScope, doc_id: str | None, section: str, page: int | None
+) -> list[StructuredCitation]:
+    """Citation για δεδομένα που βρέθηκαν. Δεδομένα χωρίς έγγραφο στο scope
+    δεν έχουν προέλευση και είναι σφάλμα, όπως στο timeline."""
+    if doc_id is None:
+        raise ValueError(
+            f"Κανένα έγγραφο για person_id={scope.person_id!r} period={scope.period!r}"
+        )
+    return [StructuredCitation(doc_id=doc_id, page=page, section=section)]
 
 
 def _coerce_value(raw: str) -> int | str:
@@ -55,10 +82,11 @@ def _field_scores(conn: sqlite3.Connection, eval_id: int) -> list[dict]:
 def get_scores(conn: sqlite3.Connection, scope: IsolationScope) -> StructuredResult:
     where, params = scope.build_sql_where()
     row = conn.execute(f"SELECT * FROM evaluations WHERE {where}", params).fetchone()
-    doc_ids = _doc_ids_in_scope(conn, scope)
+    doc_id = _single_doc_id(conn, scope)
+    doc_ids = [doc_id] if doc_id is not None else []
 
     if row is None:
-        return StructuredResult(data={}, sources=[], retrieved_doc_ids=doc_ids)
+        return StructuredResult(data={}, citations=[], retrieved_doc_ids=doc_ids)
 
     data = {
         "person_id": scope.person_id,
@@ -84,8 +112,8 @@ def get_scores(conn: sqlite3.Connection, scope: IsolationScope) -> StructuredRes
         "gnomatevon_notes": row["gnomatevon_notes"],
         "field_scores": _field_scores(conn, row["id"]),
     }
-    sources = [{"doc_id": doc_id, "section": _EVALUATION_SECTION} for doc_id in doc_ids]
-    return StructuredResult(data=data, sources=sources, retrieved_doc_ids=doc_ids)
+    citations = _citations(scope, doc_id, _EVALUATION_SECTION, row["source_page"])
+    return StructuredResult(data=data, citations=citations, retrieved_doc_ids=doc_ids)
 
 
 def compare_periods(
@@ -101,9 +129,9 @@ def compare_periods(
         "entry_a": result_a.data,
         "entry_b": result_b.data,
     }
-    sources = result_a.sources + result_b.sources
+    citations = result_a.citations + result_b.citations
     retrieved_doc_ids = sorted(set(result_a.retrieved_doc_ids) | set(result_b.retrieved_doc_ids))
-    return StructuredResult(data=data, sources=sources, retrieved_doc_ids=retrieved_doc_ids)
+    return StructuredResult(data=data, citations=citations, retrieved_doc_ids=retrieved_doc_ids)
 
 
 def top_bottom_sections(
@@ -139,7 +167,7 @@ def top_bottom_sections(
         "overall": overall,
     }
     return StructuredResult(
-        data=data, sources=result.sources, retrieved_doc_ids=result.retrieved_doc_ids
+        data=data, citations=result.citations, retrieved_doc_ids=result.retrieved_doc_ids
     )
 
 
@@ -150,7 +178,8 @@ def get_promotions_table(conn: sqlite3.Connection, scope: IsolationScope) -> Str
     ο επόμενος ανώτερος βαθμός στον ίδιο τον πίνακα) - None για row_index 0,
     ποτέ συμπερασμένο από ιεραρχία βαθμών εκτός πίνακα."""
     rows = get_promotions(conn, scope.person_id)
-    doc_ids = _doc_ids_in_scope(conn, scope)
+    doc_id = _single_doc_id(conn, scope)
+    doc_ids = [doc_id] if doc_id is not None else []
 
     rank_by_row_index = {row["row_index"]: row["rank"] for row in rows}
     data_rows = [
@@ -165,14 +194,16 @@ def get_promotions_table(conn: sqlite3.Connection, scope: IsolationScope) -> Str
         for row in rows
     ]
     data = {"person_id": scope.person_id, "rows": data_rows}
-    sources = [{"doc_id": doc_id, "section": _PROMOTIONS_SECTION} for doc_id in doc_ids]
-    return StructuredResult(data=data, sources=sources, retrieved_doc_ids=doc_ids)
+    # Ο πίνακας promotions δεν έχει στήλη σελίδας: page=None, όχι εικασία.
+    citations = _citations(scope, doc_id, _PROMOTIONS_SECTION, None) if rows else []
+    return StructuredResult(data=data, citations=citations, retrieved_doc_ids=doc_ids)
 
 
 def get_service_time_table(conn: sqlite3.Connection, scope: IsolationScope) -> StructuredResult:
     """Πίνακας ΣΥΝΟΛΙΚΟΣ ΧΡΟΝΟΣ ΥΠΗΡΕΣΙΑΣ, career-wide (μόνο person_id)."""
     rows = get_service_time(conn, scope.person_id)
-    doc_ids = _doc_ids_in_scope(conn, scope)
+    doc_id = _single_doc_id(conn, scope)
+    doc_ids = [doc_id] if doc_id is not None else []
 
     data_rows = [
         {
@@ -186,5 +217,6 @@ def get_service_time_table(conn: sqlite3.Connection, scope: IsolationScope) -> S
         for row in rows
     ]
     data = {"person_id": scope.person_id, "rows": data_rows}
-    sources = [{"doc_id": doc_id, "section": _SERVICE_TIME_SECTION} for doc_id in doc_ids]
-    return StructuredResult(data=data, sources=sources, retrieved_doc_ids=doc_ids)
+    # Ο πίνακας service_time δεν έχει στήλη σελίδας: page=None, όχι εικασία.
+    citations = _citations(scope, doc_id, _SERVICE_TIME_SECTION, None) if rows else []
+    return StructuredResult(data=data, citations=citations, retrieved_doc_ids=doc_ids)

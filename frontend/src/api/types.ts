@@ -8,7 +8,12 @@ export interface PersonOut {
   name: string
 }
 
-export type StructuredOperation = 'get_scores' | 'compare_periods' | 'top_bottom_sections'
+export type StructuredOperation =
+  | 'get_scores'
+  | 'compare_periods'
+  | 'top_bottom_sections'
+  | 'get_promotions_table'
+  | 'get_service_time_table'
 
 export interface StructuredQueryRequest {
   person_id: string
@@ -31,6 +36,14 @@ export interface Citation {
   score: number
 }
 
+// Παραπομπή δομημένης απάντησης (backend StructuredCitation). page `null` =
+// η σελίδα δεν καταγράφηκε στη DB (π.χ. promotions, service_time).
+export interface StructuredCitation {
+  doc_id: string
+  page: number | null
+  section: string
+}
+
 // Το ολιστικό πεδίο (field_code 141) που το top_bottom_sections επιστρέφει στο
 // `data.overall`, χωριστά από την κατάταξη. `null` = δεν υπάρχει στην περίοδο.
 export interface OverallFieldScore {
@@ -42,7 +55,7 @@ export interface OverallFieldScore {
 export interface StructuredResult {
   mode: 'structured'
   data: Record<string, unknown>
-  sources: Record<string, string>[]
+  citations: StructuredCitation[]
   retrieved_doc_ids: string[]
 }
 
