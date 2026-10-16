@@ -24,6 +24,14 @@ class AuditEntry(BaseModel):
     # Κωδικός άρνησης του precheck (app.retrieval.precheck.RefusalReason),
     # verbatim. None όταν δεν υπήρξε άρνηση.
     refusal_reason: str | None = None
+    # Το scope της κλήσης, όπως εφαρμόστηκε (όχι όπως διατυπώθηκε στην
+    # ερώτηση). period: η περίοδος του scope, "career" για τα career-wide
+    # operations, "all" για το timeline, το raw ζητούμενο string στα 403/422.
+    # other_period: μόνο στο compare_periods. NULL στις παλιές γραμμές
+    # σημαίνει "δεν καταγράφηκε".
+    person_id: str | None = None
+    period: str | None = None
+    other_period: str | None = None
 
 
 def write_audit(conn: sqlite3.Connection, entry: AuditEntry) -> int:
@@ -32,8 +40,8 @@ def write_audit(conn: sqlite3.Connection, entry: AuditEntry) -> int:
         """
         INSERT INTO audit_log
             (user, query, retrieved_doc_ids, mode, prompt_version, unsupported_ranks, answer_text,
-             refusal_reason)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+             refusal_reason, person_id, period, other_period)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             entry.user,
@@ -44,6 +52,9 @@ def write_audit(conn: sqlite3.Connection, entry: AuditEntry) -> int:
             json.dumps(entry.unsupported_ranks) if entry.unsupported_ranks is not None else None,
             entry.answer_text,
             entry.refusal_reason,
+            entry.person_id,
+            entry.period,
+            entry.other_period,
         ),
     )
     return cursor.lastrowid

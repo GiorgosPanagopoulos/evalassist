@@ -47,6 +47,7 @@ logger = logging.getLogger(__name__)
 
 SEMANTIC_DISABLED_CODE = "semantic_disabled"
 SEMANTIC_DISABLED_DETAIL = "Η σημασιολογική αναζήτηση δεν είναι ενεργή σε αυτή την εγκατάσταση."
+CAREER_WIDE_OPERATIONS = ("get_promotions_table", "get_service_time_table")
 
 
 def _audit(
@@ -59,6 +60,10 @@ def _audit(
     unsupported_ranks: list[str] | None = None,
     answer_text: str | None = None,
     refusal_reason: str | None = None,
+    *,
+    person_id: str | None,
+    period: str | None,
+    other_period: str | None = None,
 ) -> int:
     audit_id = write_audit(
         conn,
@@ -71,6 +76,9 @@ def _audit(
             unsupported_ranks=unsupported_ranks,
             answer_text=answer_text,
             refusal_reason=refusal_reason,
+            person_id=person_id,
+            period=period,
+            other_period=other_period,
         ),
     )
     conn.commit()
@@ -84,6 +92,13 @@ def query_structured(
     user: SessionUser = Depends(require_user),
 ) -> StructuredQueryResponse:
     doc_ids: list[str] = []
+    # Το scope που εφαρμόζεται, για το audit: τα career-wide operations
+    # αγνοούν το request.period και διαβάζουν πάντα CAREER_PERIOD.
+    audit_scope = {
+        "person_id": request.person_id,
+        "period": CAREER_PERIOD if request.operation in CAREER_WIDE_OPERATIONS else request.period,
+        "other_period": request.other_period if request.operation == "compare_periods" else None,
+    }
     try:
         scope = IsolationScope(person_id=request.person_id, period=request.period)
         # Τα career-wide operations αγνοούν το request.period, άρα δεν το επικυρώνουν.
@@ -111,7 +126,7 @@ def query_structured(
     except Exception as exc:
         if not doc_ids:
             doc_ids = getattr(exc, "retrieved_doc_ids", []) or []
-        _audit(conn, user.username, request.model_dump_json(), doc_ids, "structured")
+        _audit(conn, user.username, request.model_dump_json(), doc_ids, "structured", **audit_scope)
         raise
 
     try:
@@ -121,7 +136,15 @@ def query_structured(
         # Μόνο ο τύπος: το μήνυμα της εξαίρεσης μπορεί να περιέχει δεδομένα.
         logger.warning("Αποτυχία serialization του result.data για audit (%s)", type(exc).__name__)
         answer_text = None
-    audit_id = _audit(conn, user.username, request.model_dump_json(), doc_ids, "structured", answer_text=answer_text)
+    audit_id = _audit(
+        conn,
+        user.username,
+        request.model_dump_json(),
+        doc_ids,
+        "structured",
+        answer_text=answer_text,
+        **audit_scope,
+    )
     return StructuredQueryResponse(result=result, audit_id=audit_id)
 
 
@@ -147,6 +170,8 @@ def query_semantic(
             [],
             "semantic",
             refusal_reason=SEMANTIC_DISABLED_CODE,
+            person_id=request.person_id,
+            period=request.period,
         )
         return JSONResponse(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -171,12 +196,29 @@ def query_semantic(
             doc_ids = result.retrieved_doc_ids
     except InvalidPeriodError:
         # Λάθος αιτήματος πριν από οποιαδήποτε ανάκτηση ή prompt.
-        _audit(conn, user.username, request.question, [], "semantic")
+        _audit(
+            conn,
+            user.username,
+            request.question,
+            [],
+            "semantic",
+            person_id=request.person_id,
+            period=request.period,
+        )
         raise
     except Exception as exc:
         if not doc_ids:
             doc_ids = getattr(exc, "retrieved_doc_ids", []) or []
-        _audit(conn, user.username, request.question, doc_ids, "semantic", retriever.prompt_version)
+        _audit(
+            conn,
+            user.username,
+            request.question,
+            doc_ids,
+            "semantic",
+            retriever.prompt_version,
+            person_id=scope.person_id,
+            period=scope.period,
+        )
         raise
 
     if refusal is not None:
@@ -191,6 +233,8 @@ def query_semantic(
             "semantic",
             answer_text=refusal.text,
             refusal_reason=refusal.reason,
+            person_id=scope.person_id,
+            period=scope.period,
         )
         refused = SemanticResult(
             answer=refusal.text,
@@ -210,5 +254,7 @@ def query_semantic(
         result.prompt_version,
         result.unsupported_ranks,
         answer_text=result.answer,
+        person_id=scope.person_id,
+        period=scope.period,
     )
     return SemanticQueryResponse(result=result, audit_id=audit_id)

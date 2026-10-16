@@ -38,6 +38,7 @@ from app.models.evaluation import (  # noqa: E402
 )
 
 PERIOD = "2025-01-01..2025-12-31"
+OTHER_PERIOD = "2024-01-01..2024-12-31"
 
 _PROMOTION_ROWS = [
     {
@@ -176,6 +177,9 @@ def test_audit_row_written_with_structured_mode():
         assert row["id"] == audit_id
         assert row["mode"] == "structured"
         assert json.loads(row["retrieved_doc_ids"]) == ["doc-p1"]
+        assert row["person_id"] == "p1"
+        assert row["period"] == PERIOD
+        assert row["other_period"] is None
     finally:
         _clear_overrides()
         os.remove(db_path)
@@ -259,6 +263,10 @@ def test_get_promotions_table_writes_audit_row():
         assert row["id"] == audit_id
         assert row["mode"] == "structured"
         assert json.loads(row["retrieved_doc_ids"]) == ["doc-p1-career"]
+        # Εφαρμόστηκε CAREER_PERIOD, όχι το request.period που αγνοήθηκε.
+        assert row["person_id"] == "p1"
+        assert row["period"] == CAREER_PERIOD
+        assert row["other_period"] is None
     finally:
         _clear_overrides()
         os.remove(db_path)
@@ -328,10 +336,14 @@ def test_unknown_period_is_422_with_audit_for_period_scoped_operations():
         rows = conn.execute("SELECT * FROM audit_log ORDER BY id").fetchall()
         conn.close()
         assert len(rows) == len(payloads)
-        for row in rows:
+        for row, payload in zip(rows, payloads):
             assert row["mode"] == "structured"
             assert json.loads(row["retrieved_doc_ids"]) == []
             assert row["answer_text"] is None
+            # Raw ζητούμενες τιμές, ακόμη κι όταν δεν υπάρχουν.
+            assert row["person_id"] == payload["person_id"], payload
+            assert row["period"] == payload["period"], payload
+            assert row["other_period"] == payload.get("other_period"), payload
     finally:
         _clear_overrides()
         os.remove(db_path)
@@ -348,6 +360,49 @@ def test_career_wide_operations_ignore_period_validation():
                 json={"person_id": "p1", "period": "2030-01-01..2030-12-31", "operation": operation},
             )
             assert response.status_code == 200, operation
+            row = _last_audit_row(db_path)
+            assert row["id"] == response.json()["audit_id"]
+            assert row["person_id"] == "p1"
+            assert row["period"] == CAREER_PERIOD, operation
+            assert row["other_period"] is None
+    finally:
+        _clear_overrides()
+        os.remove(db_path)
+
+
+def test_compare_periods_audits_both_periods():
+    db_path = _make_temp_db()
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        older = _entry(score=90, characterization="ΕΞΑΙΡΕΤΟΣ").model_copy(
+            update={"period_start": date(2024, 1, 1), "period_end": date(2024, 12, 31)}
+        )
+        assert older.period == OTHER_PERIOD
+        eval_id = repository.upsert_evaluation(conn, "p1", older)
+        repository.replace_field_scores(conn, eval_id, older.field_scores)
+        repository.upsert_document(conn, "doc-p1", "p1", OTHER_PERIOD, "/docs/doc-p1.pdf", 8)
+        conn.commit()
+        conn.close()
+
+        _override_settings(db_path)
+        client = logged_in_client(app, db_path)
+        response = client.post(
+            "/api/query/structured",
+            json={
+                "person_id": "p1",
+                "period": PERIOD,
+                "operation": "compare_periods",
+                "other_period": OTHER_PERIOD,
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        row = _last_audit_row(db_path)
+        assert row["id"] == response.json()["audit_id"]
+        assert row["person_id"] == "p1"
+        assert row["period"] == PERIOD
+        assert row["other_period"] == OTHER_PERIOD
     finally:
         _clear_overrides()
         os.remove(db_path)
@@ -366,6 +421,7 @@ def run_all():
         test_promotions_table_operation_rejects_other_period,
         test_unknown_period_is_422_with_audit_for_period_scoped_operations,
         test_career_wide_operations_ignore_period_validation,
+        test_compare_periods_audits_both_periods,
     ]
     for test in tests:
         test()

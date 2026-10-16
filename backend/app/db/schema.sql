@@ -113,7 +113,10 @@ CREATE TABLE IF NOT EXISTS audit_log (
     prompt_version      TEXT,
     unsupported_ranks   TEXT,
     answer_text         TEXT,
-    refusal_reason      TEXT
+    refusal_reason      TEXT,
+    person_id           TEXT,
+    period              TEXT,
+    other_period        TEXT
 );
 
 -- Τα δύο triggers μπλοκάρουν UPDATE/DELETE στο audit_log μέσω DML από την

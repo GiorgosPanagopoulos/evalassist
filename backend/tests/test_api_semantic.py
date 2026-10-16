@@ -159,6 +159,12 @@ def _last_audit_row(db_path: Path) -> sqlite3.Row:
     return row
 
 
+def _assert_audit_scope(row: sqlite3.Row, person_id: str, period: str) -> None:
+    assert row["person_id"] == person_id
+    assert row["period"] == period
+    assert row["other_period"] is None
+
+
 def test_response_embeds_result_and_audit_id():
     db_path = _make_temp_db()
     try:
@@ -200,6 +206,7 @@ def test_audit_row_has_semantic_mode_and_citation_doc_ids():
         assert json.loads(row["retrieved_doc_ids"]) == ["doc1"]
         assert row["prompt_version"] == "v2"
         assert json.loads(row["unsupported_ranks"]) == []
+        _assert_audit_scope(row, "p1", PERIOD)
     finally:
         _clear_overrides()
         os.remove(db_path)
@@ -285,6 +292,7 @@ def test_llm_failure_after_retrieval_audits_retrieved_doc_ids():
         assert json.loads(rows[0]["retrieved_doc_ids"]) == ["DOC-1", "DOC-2"]
         assert rows[0]["prompt_version"] == "v2"
         assert rows[0]["unsupported_ranks"] is None
+        _assert_audit_scope(rows[0], "p1", PERIOD)
     finally:
         _clear_overrides()
         os.remove(db_path)
@@ -399,6 +407,8 @@ def test_unknown_period_is_422_audited_without_retrieval():
         assert json.loads(rows[0]["retrieved_doc_ids"]) == []
         assert rows[0]["prompt_version"] is None
         assert rows[0]["answer_text"] is None
+        # Κανένα scope δεν εφαρμόστηκε: γράφεται το raw ζητούμενο.
+        _assert_audit_scope(rows[0], "p1", "2030-01-01..2030-12-31")
     finally:
         _clear_overrides()
         os.remove(db_path)
@@ -412,7 +422,9 @@ def test_unknown_person_is_422():
         )
         assert response.status_code == 422
         assert retriever.calls == []
-        assert len(_audit_rows(db_path)) == 1
+        rows = _audit_rows(db_path)
+        assert len(rows) == 1
+        _assert_audit_scope(rows[0], "ghost", PERIOD)
     finally:
         _clear_overrides()
         os.remove(db_path)
@@ -444,6 +456,7 @@ def _assert_precheck_refusal(db_path: Path, question: str, reason: str, text_pre
     # Ο κωδικός γράφεται verbatim ως απλό TEXT (όχι repr του enum).
     assert type(rows[0]["refusal_reason"]) is str
     assert rows[0]["refusal_reason"] == reason
+    _assert_audit_scope(rows[0], "p1", PERIOD)
 
 
 def test_year_out_of_range_refused_without_retrieval():

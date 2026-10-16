@@ -340,6 +340,113 @@ def test_migration_runs_twice_without_error():
         os.remove(db_path)
 
 
+# Το schema του audit_log όπως είναι στην πραγματική ΒΔ πριν από το scope
+# (με refusal_reason, χωρίς person_id/period/other_period), μαζί με τα triggers.
+_PRE_SCOPE_SCHEMA = _PRE_REFUSAL_REASON_SCHEMA.replace(
+    ", unsupported_ranks TEXT, answer_text TEXT);",
+    ", unsupported_ranks TEXT, answer_text TEXT, refusal_reason TEXT);",
+)
+_SCOPE_COLUMNS = ("person_id", "period", "other_period")
+
+
+def _make_pre_scope_db() -> Path:
+    db_path = _make_temp_db_path()
+    conn = sqlite3.connect(db_path)
+    conn.executescript(_PRE_SCOPE_SCHEMA)
+    conn.executemany(
+        "INSERT INTO audit_log (user, query, retrieved_doc_ids, mode, prompt_version, "
+        "unsupported_ranks, answer_text) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        _PRE_REFUSAL_REASON_ROWS,
+    )
+    conn.commit()
+    conn.close()
+    return db_path
+
+
+def _all_rows(conn: sqlite3.Connection) -> list[tuple]:
+    return [
+        tuple(r)
+        for r in conn.execute(f"SELECT {_OLD_COLUMNS}, refusal_reason FROM audit_log ORDER BY id")
+    ]
+
+
+def test_migration_adds_scope_columns_keeps_rows_and_triggers():
+    db_path = _make_pre_scope_db()
+    try:
+        conn = sqlite3.connect(db_path)
+        columns_before = [r[1] for r in conn.execute("PRAGMA table_info(audit_log)")]
+        rows_before = _all_rows(conn)
+        triggers_before = _trigger_sql(conn)
+        conn.close()
+        assert not set(_SCOPE_COLUMNS) & set(columns_before)
+        assert len(rows_before) == 3
+
+        init_db(db_path)
+
+        conn = sqlite3.connect(db_path)
+        columns = [r[1] for r in conn.execute("PRAGMA table_info(audit_log)")]
+        assert columns == columns_before + list(_SCOPE_COLUMNS)
+        assert _all_rows(conn) == rows_before
+        # Καμία backfill: οι παλιές γραμμές μένουν NULL.
+        not_null = conn.execute(
+            "SELECT COUNT(*) FROM audit_log WHERE "
+            "person_id IS NOT NULL OR period IS NOT NULL OR other_period IS NOT NULL"
+        ).fetchone()[0]
+        assert not_null == 0
+        assert _trigger_sql(conn) == triggers_before
+        try:
+            conn.execute("UPDATE audit_log SET period = 'x' WHERE id = 1")
+            assert False, "expected UPDATE to be blocked after migration"
+        except sqlite3.DatabaseError as exc:
+            assert "append-only" in str(exc)
+
+        audit_id = write_audit(
+            conn,
+            AuditEntry(
+                user="u4",
+                query="q",
+                retrieved_doc_ids=[],
+                mode="structured",
+                person_id="p1",
+                period="2025-01-01..2025-12-31",
+                other_period="2024-01-01..2024-12-31",
+            ),
+        )
+        conn.commit()
+        value = conn.execute(
+            "SELECT person_id, period, other_period FROM audit_log WHERE id = ?", (audit_id,)
+        ).fetchone()
+        conn.close()
+        assert value == ("p1", "2025-01-01..2025-12-31", "2024-01-01..2024-12-31")
+    finally:
+        os.remove(db_path)
+
+
+def test_scope_migration_second_run_changes_nothing():
+    db_path = _make_pre_scope_db()
+    try:
+        init_db(db_path)
+        conn = sqlite3.connect(db_path)
+        schema_first = conn.execute(
+            "SELECT type, name, sql FROM sqlite_master WHERE tbl_name = 'audit_log' ORDER BY name"
+        ).fetchall()
+        rows_first = conn.execute("SELECT * FROM audit_log ORDER BY id").fetchall()
+        conn.close()
+
+        init_db(db_path)
+
+        conn = sqlite3.connect(db_path)
+        schema_second = conn.execute(
+            "SELECT type, name, sql FROM sqlite_master WHERE tbl_name = 'audit_log' ORDER BY name"
+        ).fetchall()
+        rows_second = conn.execute("SELECT * FROM audit_log ORDER BY id").fetchall()
+        conn.close()
+        assert schema_second == schema_first
+        assert rows_second == rows_first
+    finally:
+        os.remove(db_path)
+
+
 def run_all():
     tests = [
         test_init_db_write_audit_returns_id,
@@ -350,6 +457,8 @@ def run_all():
         test_migration_adds_answer_text_and_keeps_triggers,
         test_migration_adds_refusal_reason_keeps_rows_and_triggers,
         test_migration_runs_twice_without_error,
+        test_migration_adds_scope_columns_keeps_rows_and_triggers,
+        test_scope_migration_second_run_changes_nothing,
     ]
     for test in tests:
         test()

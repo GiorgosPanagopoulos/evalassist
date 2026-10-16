@@ -21,6 +21,11 @@ from app.retrieval.timeline import TimelineResult, get_timeline
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# Το timeline διαβάζει όλες τις περιόδους του ατόμου, χωρίς φίλτρο περιόδου.
+# Όχι CAREER_PERIOD (αυτό είναι τα career-wide έγγραφα) και όχι NULL (NULL
+# στο audit_log σημαίνει "δεν καταγράφηκε").
+TIMELINE_AUDIT_PERIOD = "all"
+
 
 class TimelineResponse(BaseModel):
     result: TimelineResult
@@ -42,6 +47,8 @@ def _audit(
             retrieved_doc_ids=doc_ids,
             mode=RetrievalMode.STRUCTURED,
             answer_text=answer_text,
+            person_id=person_id,
+            period=TIMELINE_AUDIT_PERIOD,
         ),
     )
     conn.commit()
