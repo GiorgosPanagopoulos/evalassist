@@ -70,7 +70,8 @@ export interface SemanticQueryResponse {
 
 export interface HealthResponse {
   status: string
-  ollama_reachable: boolean
+  // null: δεν ελέγχθηκε (semantic κλειστό, ο server δεν καλεί το Ollama).
+  ollama_reachable: boolean | null
 }
 
 // Mirrors backend/app/retrieval/timeline.py + backend/app/api/routes_timeline.py.

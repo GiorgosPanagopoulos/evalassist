@@ -1,5 +1,8 @@
 """Mini test/sample flow για /api/persons, /api/persons/{id}/periods, /api/health.
 
+Health: με το semantic κλειστό ΚΑΜΙΑ κλήση στο Ollama και ollama_reachable=null
+(δεν ελέγχθηκε). Με το semantic ανοιχτό όπως πριν: true αν απαντά, false αν όχι.
+
 Εκτελείται standalone: `python tests/test_api_meta.py`
 """
 
@@ -14,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from auth_helpers import logged_in_client, new_client  # noqa: E402
 
+from app.api import routes_health  # noqa: E402
 from app.api.main import app  # noqa: E402
 from app.core.config import Settings, get_settings  # noqa: E402
 from app.db import repository  # noqa: E402
@@ -59,8 +63,10 @@ def _make_temp_db() -> Path:
     return db_path
 
 
-def _override_settings(db_path: Path, ollama_url: str | None = None) -> None:
-    kwargs = {"DB_PATH": db_path}
+def _override_settings(
+    db_path: Path, ollama_url: str | None = None, semantic_enabled: bool = False
+) -> None:
+    kwargs = {"DB_PATH": db_path, "SEMANTIC_ENABLED": semantic_enabled}
     if ollama_url is not None:
         kwargs["OLLAMA_URL"] = ollama_url
     test_settings = Settings(_env_file=None, **kwargs)
@@ -102,11 +108,55 @@ def test_list_periods_for_person():
         os.remove(db_path)
 
 
+class _FakeHttpx:
+    """Αντικαθιστά το httpx του routes_health. Με status_code=None κάθε κλήση
+    αποτυγχάνει το test: ο κώδικας δεν έπρεπε να καλέσει το Ollama."""
+
+    def __init__(self, status_code: int | None):
+        self.status_code = status_code
+        self.urls: list[str] = []
+
+    def get(self, url: str, timeout: float):
+        self.urls.append(url)
+        if self.status_code is None:
+            raise AssertionError(f"Μη αναμενόμενη κλήση στο Ollama: {url}")
+        return type("FakeResponse", (), {"status_code": self.status_code})()
+
+
+def _health_with_fake_httpx(fake: _FakeHttpx, semantic_enabled: bool) -> dict:
+    db_path = _make_temp_db()
+    original = routes_health.httpx
+    routes_health.httpx = fake
+    try:
+        _override_settings(db_path, semantic_enabled=semantic_enabled)
+        response = new_client(app).get("/api/health")
+        assert response.status_code == 200
+        return response.json()
+    finally:
+        routes_health.httpx = original
+        _clear_overrides()
+        os.remove(db_path)
+
+
+def test_health_with_semantic_disabled_never_calls_ollama():
+    fake = _FakeHttpx(status_code=None)
+    body = _health_with_fake_httpx(fake, semantic_enabled=False)
+    assert body == {"status": "ok", "ollama_reachable": None}
+    assert fake.urls == []
+
+
+def test_health_with_semantic_enabled_reports_ollama_reachable():
+    fake = _FakeHttpx(status_code=200)
+    body = _health_with_fake_httpx(fake, semantic_enabled=True)
+    assert body == {"status": "ok", "ollama_reachable": True}
+    assert fake.urls == ["http://localhost:11434/api/tags"]
+
+
 def test_health_reports_ollama_unreachable_on_dead_port():
     db_path = _make_temp_db()
     try:
         # port 1 δεν έχει listener -> connection refused, γρήγορο fail
-        _override_settings(db_path, ollama_url="http://127.0.0.1:1")
+        _override_settings(db_path, ollama_url="http://127.0.0.1:1", semantic_enabled=True)
         client = new_client(app)
 
         response = client.get("/api/health")
@@ -124,6 +174,8 @@ def run_all():
     tests = [
         test_list_persons,
         test_list_periods_for_person,
+        test_health_with_semantic_disabled_never_calls_ollama,
+        test_health_with_semantic_enabled_reports_ollama_reachable,
         test_health_reports_ollama_unreachable_on_dead_port,
     ]
     for test in tests:

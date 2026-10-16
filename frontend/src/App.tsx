@@ -118,7 +118,7 @@ function Workspace({ api, me, onLogout, onPasswordChanged }: WorkspaceProps) {
             <span style={{ color: '#f2f2f4' }}>{crumb}</span>
           </div>
           <div className="flex items-center gap-3">
-            <HealthIndicator api={api} />
+            <HealthIndicator api={api} semanticEnabled={me.features?.semantic_enabled === true} />
             <span className="font-mono text-[11.5px]" style={{ color: '#c9c9d1' }} aria-label="Συνδεδεμένος χρήστης">
               {me.username}
             </span>

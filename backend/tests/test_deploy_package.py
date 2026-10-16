@@ -317,6 +317,10 @@ def test_smoke_passes_on_structured_only_server_without_printing_secrets():
         assert code == 0, output
         assert sum(line.startswith("OK  ") for line in lines) == 7, output
         assert "FAIL" not in output
+        # Semantic κλειστό: το health δεν ελέγχει το Ollama (null).
+        assert any(
+            line.startswith("OK   health") and "ollama_reachable=null" in line for line in lines
+        ), output
         assert "Secure" in output and "HttpOnly" in output
         # Το cookie βρέθηκε και στάλθηκε ρητά (αλλιώς το me θα ήταν 401)...
         assert cookies and "=" in cookies[0]
@@ -353,6 +357,10 @@ def test_smoke_fails_when_semantic_is_enabled():
             code, lines, _ = _run_smoke(base_url, TEST_PASSWORD)
         output = "\n".join(lines)
         assert code == 1, output
+        # Με το semantic ανοιχτό το health ελέγχει το Ollama (εδώ false, όχι null).
+        assert any(
+            line.startswith("FAIL health") and "ollama_reachable=false" in line for line in lines
+        ), output
         assert any(line.startswith("FAIL me, semantic_enabled=false") for line in lines), output
         assert any(line.startswith("FAIL semantic κλειστό") for line in lines), output
     finally:

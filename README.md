@@ -265,7 +265,7 @@ Every data endpoint is scoped through `IsolationScope` before it touches SQLite 
 | GET | `/api/persons` | List all persons (`person_id`, `name`), used to populate pickers |
 | GET | `/api/persons/{person_id}/periods` | List evaluation periods available for a given person |
 | GET | `/api/person/{person_id}/timeline` | Per-person score timeline with cited points |
-| GET | `/api/health` | Public. Service health, including whether the local Ollama server is reachable |
+| GET | `/api/health` | Public. Service health. `ollama_reachable` is `true`/`false` when semantic is enabled, and `null` (not checked, no call to Ollama) when it is disabled |
 
 `/docs`, `/redoc` and `/openapi.json` are off unless `ENABLE_DOCS=true`. When `frontend/dist` exists, the backend also serves the built frontend at `/`, after the `/api` routes.
 

@@ -5,20 +5,43 @@ import type { ApiClient } from '../api/client'
 // real ApiClient instance.
 export type HealthIndicatorApi = Pick<ApiClient, 'getHealth'>
 
-export function HealthIndicator({ api }: { api: HealthIndicatorApi }) {
-  const [ollamaReachable, setOllamaReachable] = useState<boolean | null>(null)
+type HealthState = 'checking' | 'ok' | 'ollama_down' | 'system_down'
+
+const GREEN_DOT = { backgroundColor: '#3fdd78', boxShadow: '0 0 8px rgba(63,221,120,.6)' }
+const AMBER_DOT = { backgroundColor: '#f59e0b' }
+
+// semanticEnabled έρχεται από το features.semantic_enabled του /api/auth/me,
+// τη μόνη πηγή του flag. Το ollama_reachable του health μετρά μόνο με το
+// semantic ανοιχτό: κλειστό σημαίνει ότι το Ollama δεν χρειάζεται, όχι βλάβη.
+export function HealthIndicator({
+  api,
+  semanticEnabled,
+}: {
+  api: HealthIndicatorApi
+  semanticEnabled: boolean
+}) {
+  const [state, setState] = useState<HealthState>('checking')
 
   useEffect(() => {
     let cancelled = false
-    api.getHealth().then((health) => {
-      if (!cancelled) setOllamaReachable(health.ollama_reachable)
-    })
+    api
+      .getHealth()
+      .then((health) => {
+        if (cancelled) return
+        if (health.status !== 'ok') setState('system_down')
+        else if (!semanticEnabled || health.ollama_reachable === true) setState('ok')
+        else setState('ollama_down')
+      })
+      .catch(() => {
+        // Network σφάλμα ή μη-2xx: το ίδιο το API δεν απαντά.
+        if (!cancelled) setState('system_down')
+      })
     return () => {
       cancelled = true
     }
-  }, [api])
+  }, [api, semanticEnabled])
 
-  if (ollamaReachable === null) {
+  if (state === 'checking') {
     return (
       <span className="inline-flex items-center gap-2 text-[11.5px]" style={{ color: '#8b8b95' }}>
         <span className="h-1.75 w-1.75 rounded-full bg-gray-400" aria-hidden />
@@ -27,21 +50,21 @@ export function HealthIndicator({ api }: { api: HealthIndicatorApi }) {
     )
   }
 
+  const ok = state === 'ok'
   return (
     <span className="inline-flex items-center gap-2 text-[11.5px]">
       <span
         className="h-1.75 w-1.75 rounded-full"
-        style={
-          ollamaReachable
-            ? { backgroundColor: '#3fdd78', boxShadow: '0 0 8px rgba(63,221,120,.6)' }
-            : { backgroundColor: '#f59e0b' }
-        }
+        style={ok ? GREEN_DOT : AMBER_DOT}
+        data-testid="health-dot"
         aria-hidden
       />
-      {ollamaReachable ? (
+      {ok ? (
         <span style={{ color: '#8b8b95' }}>Σύστημα ενεργό</span>
       ) : (
-        <span style={{ color: '#f59e0b' }}>Ollama μη διαθέσιμο</span>
+        <span style={{ color: '#f59e0b' }}>
+          {state === 'ollama_down' ? 'Ollama μη διαθέσιμο' : 'Σύστημα μη διαθέσιμο'}
+        </span>
       )}
     </span>
   )
