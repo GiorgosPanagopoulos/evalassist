@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiClient, ApiError } from './api/client'
-import type { Me, SemanticResult, StructuredResult } from './api/types'
+import type { Me, PersonOut, SemanticResult, StructuredResult } from './api/types'
 import { QueryForm } from './components/QueryForm'
 import { ResultsPanel } from './components/ResultsPanel'
 import { HealthIndicator } from './components/HealthIndicator'
@@ -64,8 +64,23 @@ function Workspace({ api, me, onLogout, onPasswordChanged }: WorkspaceProps) {
   const [auditId, setAuditId] = useState<number | null>(null)
   const [modeLabel, setModeLabel] = useState('βαθμολογίες')
   const [view, setView] = useState<View>('queries')
+  // Μία πηγή αλήθειας για το άτομο: το «Άτομο» του αριστερού πάνελ. Το ref
+  // κρατά το τρέχον person_id για σύγκριση με απαντήσεις που φτάνουν αργά.
+  const [selectedPerson, setSelectedPerson] = useState<PersonOut | null>(null)
+  const selectedPersonIdRef = useRef('')
 
-  function handleResult(result: StructuredResult | SemanticResult, auditId: number) {
+  function handlePersonChange(person: PersonOut | null) {
+    selectedPersonIdRef.current = person?.person_id ?? ''
+    setSelectedPerson(person)
+    // Ποτέ στοιχεία δύο ατόμων μαζί: τα αποτελέσματα του προηγούμενου φεύγουν.
+    setResult(null)
+    setAuditId(null)
+  }
+
+  function handleResult(result: StructuredResult | SemanticResult, auditId: number, personId: string) {
+    // Απάντηση για άτομο που δεν είναι πια επιλεγμένο (π.χ. semantic που
+    // ολοκληρώθηκε μετά την αλλαγή ατόμου): απορρίπτεται, δεν εμφανίζεται.
+    if (personId !== selectedPersonIdRef.current) return
     setResult(result)
     setAuditId(auditId)
     setView('queries')
@@ -80,7 +95,7 @@ function Workspace({ api, me, onLogout, onPasswordChanged }: WorkspaceProps) {
   const crumb = view === 'users' ? 'χρήστες' : view === 'password' ? 'αλλαγή κωδικού' : modeLabel
 
   return (
-    <div className="grid min-h-screen" style={{ gridTemplateColumns: 'minmax(220px, 300px) 1fr', backgroundColor: '#0a0a0c' }}>
+    <div className="grid min-h-screen" style={{ gridTemplateColumns: 'minmax(220px, 300px) minmax(0, 1fr)', backgroundColor: '#0a0a0c' }}>
       <aside
         className="flex h-full flex-col"
         style={{ backgroundColor: '#0e0e11', borderRight: '1px solid #1d1d22', padding: '22px 20px' }}
@@ -89,6 +104,8 @@ function Workspace({ api, me, onLogout, onPasswordChanged }: WorkspaceProps) {
 
         <QueryForm
           api={api}
+          personId={selectedPerson?.person_id ?? ''}
+          onPersonChange={handlePersonChange}
           onResult={handleResult}
           onError={handleError}
           onModeLabelChange={setModeLabel}
@@ -98,7 +115,7 @@ function Workspace({ api, me, onLogout, onPasswordChanged }: WorkspaceProps) {
       </aside>
 
       <div
-        className="relative flex flex-col overflow-hidden"
+        className="relative flex min-w-0 flex-col overflow-hidden"
         style={{ background: 'radial-gradient(ellipse at 50% 40%, #131316 0%, #0a0a0c 70%)' }}
       >
         <img
@@ -161,11 +178,11 @@ function Workspace({ api, me, onLogout, onPasswordChanged }: WorkspaceProps) {
           ) : (
             <>
               <div className="mx-auto w-full max-w-[1100px]" style={{ padding: '24px 24px 0' }}>
-                <TimelinePanel api={api} />
+                <TimelinePanel api={api} person={selectedPerson} />
               </div>
-              {result === null ? <MainEmptyState /> : (
+              {result === null || selectedPerson === null ? <MainEmptyState /> : (
                 <div className="mx-auto w-full max-w-[1100px]" style={{ padding: '24px' }}>
-                  <ResultsPanel result={result} auditId={auditId} />
+                  <ResultsPanel result={result} auditId={auditId} person={selectedPerson} />
                 </div>
               )}
             </>

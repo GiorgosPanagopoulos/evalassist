@@ -154,7 +154,7 @@ describe('QueryForm', () => {
         other_period: '2024-Q2',
       }),
     )
-    expect(onResult).toHaveBeenCalledWith(structuredResult, 1)
+    expect(onResult).toHaveBeenCalledWith(structuredResult, 1, 'p1')
   })
 
   it('blocks submit when the semantic question is under 3 characters', async () => {
@@ -196,7 +196,7 @@ describe('QueryForm', () => {
         operation: 'get_scores',
       }),
     )
-    expect(onResult).toHaveBeenCalledWith(structuredResult, 1)
+    expect(onResult).toHaveBeenCalledWith(structuredResult, 1, 'p1')
   })
 
   it('submits the exact semantic payload', async () => {
@@ -221,7 +221,7 @@ describe('QueryForm', () => {
         question: 'Πώς πήγε;',
       }),
     )
-    expect(onResult).toHaveBeenCalledWith(semanticResult, 2)
+    expect(onResult).toHaveBeenCalledWith(semanticResult, 2, 'p1')
   })
 
   describe('career-wide operations', () => {
@@ -272,7 +272,7 @@ describe('QueryForm', () => {
           operation: op.value,
         })
         expect(CAREER_PERIOD).toBe('career')
-        expect(onResult).toHaveBeenCalledWith(structuredResult, 1)
+        expect(onResult).toHaveBeenCalledWith(structuredResult, 1, 'p1')
       })
     }
 

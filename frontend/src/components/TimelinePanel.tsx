@@ -1,47 +1,42 @@
 import { useEffect, useState } from 'react'
 import type { ApiClient, ApiError } from '../api/client'
 import type { PersonOut, TimelineResult } from '../api/types'
+import { PersonHeading } from './PersonHeading'
 import { TimelineChart } from './TimelineChart'
 
 // Structural subset ώστε τα tests να περνάνε plain fake αντί για ApiClient.
-export type TimelinePanelApi = Pick<ApiClient, 'getPersons' | 'getTimeline'>
+export type TimelinePanelApi = Pick<ApiClient, 'getTimeline'>
 
 interface TimelinePanelProps {
   api: TimelinePanelApi
+  // Το άτομο του αριστερού πάνελ (QueryForm), η μόνη πηγή επιλογής ατόμου:
+  // η χρονογραμμή δεν έχει δικό της dropdown ούτε δικό της state ατόμου.
+  person: PersonOut | null
 }
 
 const LABEL_CLASS = 'text-[11px] font-semibold uppercase tracking-[.6px] text-[#8b8b95]'
 
-const SELECT_CLASS =
-  'rounded-lg border border-[#26262d] py-2 pl-3 pr-8 text-[13px] appearance-none bg-no-repeat bg-[right_12px_center]'
+export const NO_PERSON_TEXT = 'Επιλέξτε άτομο από αριστερά'
 
-const CHEVRON_BG = {
-  backgroundImage:
-    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%234a4a55' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
-}
-
-export function TimelinePanel({ api }: TimelinePanelProps) {
-  const [persons, setPersons] = useState<PersonOut[]>([])
-  const [personId, setPersonId] = useState('')
+export function TimelinePanel({ api, person }: TimelinePanelProps) {
+  const personId = person?.person_id ?? ''
   const [result, setResult] = useState<TimelineResult | null>(null)
   const [auditId, setAuditId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    api.getPersons().then(setPersons)
-  }, [api])
-
-  useEffect(() => {
+    // Καθαρισμός πριν από κάθε νέο άτομο: η χρονογραμμή του προηγούμενου δεν
+    // μένει ποτέ στην οθόνη όσο φορτώνει η επόμενη.
+    setResult(null)
+    setAuditId(null)
+    setError(null)
     if (!personId) {
-      setResult(null)
-      setAuditId(null)
-      setError(null)
+      setLoading(false)
       return
     }
     let cancelled = false
     setLoading(true)
-    setError(null)
     api
       .getTimeline(personId)
       .then((response) => {
@@ -51,8 +46,6 @@ export function TimelinePanel({ api }: TimelinePanelProps) {
       })
       .catch((err: ApiError) => {
         if (cancelled) return
-        setResult(null)
-        setAuditId(null)
         setError(err.detail ?? 'Σφάλμα')
       })
       .finally(() => {
@@ -72,31 +65,20 @@ export function TimelinePanel({ api }: TimelinePanelProps) {
       style={{ borderColor: '#1d1d22', backgroundColor: 'rgba(14,14,17,.85)', padding: '18px 20px' }}
       aria-label="Χρονογραμμή βαθμολογίας"
     >
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <span className={LABEL_CLASS}>Χρονογραμμή βαθμολογίας</span>
-          <span className="font-mono text-[11px]" style={{ color: '#6d6d78' }}>
-            structured · χωρίς LLM · GET /api/person/{'{person_id}'}/timeline
-          </span>
-        </div>
-        <label className="flex items-center gap-2">
-          <span className={LABEL_CLASS}>Άτομο</span>
-          <select
-            aria-label="Άτομο χρονογραμμής"
-            value={personId}
-            onChange={(e) => setPersonId(e.target.value)}
-            className={SELECT_CLASS}
-            style={{ backgroundColor: '#131318', color: personId ? '#f2f2f4' : '#6d6d78', ...CHEVRON_BG }}
-          >
-            <option value="">Επιλέξτε άτομο</option>
-            {persons.map((p) => (
-              <option key={p.person_id} value={p.person_id}>
-                {p.name ? `${p.name} (${p.person_id})` : `(${p.person_id})`}
-              </option>
-            ))}
-          </select>
-        </label>
+      <div className="flex flex-col gap-1">
+        <span className={LABEL_CLASS}>Χρονογραμμή βαθμολογίας</span>
+        <span className="font-mono text-[11px]" style={{ color: '#6d6d78' }}>
+          structured · χωρίς LLM · GET /api/person/{'{person_id}'}/timeline
+        </span>
       </div>
+
+      {person ? (
+        <PersonHeading person={person} testId="timeline-person" />
+      ) : (
+        <p className="text-[13px]" style={{ color: '#6d6d78' }}>
+          {NO_PERSON_TEXT}
+        </p>
+      )}
 
       {error && (
         <p className="text-sm" style={{ color: '#ff6b6b' }}>
@@ -120,12 +102,6 @@ export function TimelinePanel({ api }: TimelinePanelProps) {
           </div>
           <TimelineChart points={result.points} />
         </>
-      )}
-
-      {!personId && !loading && (
-        <p className="text-[13px]" style={{ color: '#6d6d78' }}>
-          Επιλέξτε άτομο για να δείτε τη χρονογραμμή.
-        </p>
       )}
     </section>
   )

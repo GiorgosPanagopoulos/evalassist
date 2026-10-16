@@ -1,7 +1,9 @@
-import type { OverallFieldScore, SemanticResult, StructuredResult } from '../api/types'
+import type { ReactNode } from 'react'
+import type { OverallFieldScore, PersonOut, SemanticResult, StructuredResult } from '../api/types'
 import { SemanticAnswer } from './SemanticAnswer'
 import { EmptyState } from './EmptyState'
 import { CitationList } from './CitationBadge'
+import { PersonHeading } from './PersonHeading'
 
 interface Section {
   section: string
@@ -30,6 +32,15 @@ interface EvaluationEntry {
   unit?: string
   evaluator?: Evaluator
   field_scores?: FieldScore[]
+}
+
+// Οριζόντιο scroll ΜΕΣΑ στον πίνακα σε στενό παράθυρο, όχι σε όλη τη σελίδα.
+function ScrollTable({ children }: { children: ReactNode }) {
+  return (
+    <div data-testid="table-scroll" className="max-w-full overflow-x-auto">
+      <table className="w-full border-collapse text-sm">{children}</table>
+    </div>
+  )
 }
 
 interface TopBottomItem {
@@ -61,7 +72,7 @@ function SectionsTable({ sections, title }: { sections: Section[]; title?: strin
           {title}
         </h3>
       )}
-      <table className="w-full border-collapse text-sm">
+      <ScrollTable>
         <thead>
           <tr className="border-b text-left" style={{ borderColor: '#26262d' }}>
             <th className="py-1">Ενότητα</th>
@@ -78,7 +89,7 @@ function SectionsTable({ sections, title }: { sections: Section[]; title?: strin
             </tr>
           ))}
         </tbody>
-      </table>
+      </ScrollTable>
     </div>
   )
 }
@@ -89,7 +100,7 @@ function TopBottomTable({ items, title }: { items: TopBottomItem[]; title: strin
       <h3 className="text-sm font-semibold" style={{ color: '#f2f2f4' }}>
         {title}
       </h3>
-      <table className="w-full border-collapse text-sm">
+      <ScrollTable>
         <thead>
           <tr className="border-b text-left" style={{ borderColor: '#26262d' }}>
             <th className="py-1 pr-2">Ενότητα</th>
@@ -104,7 +115,7 @@ function TopBottomTable({ items, title }: { items: TopBottomItem[]; title: strin
             </tr>
           ))}
         </tbody>
-      </table>
+      </ScrollTable>
     </div>
   )
 }
@@ -141,7 +152,7 @@ function OverallField({ overall }: { overall: OverallFieldScore }) {
 
 function FieldScoresTable({ scores }: { scores: FieldScore[] }) {
   return (
-    <table className="w-full border-collapse text-sm">
+    <ScrollTable>
       <thead>
         <tr className="border-b text-left" style={{ borderColor: '#26262d' }}>
           <th className="py-1 pr-2 w-16">Κωδικός</th>
@@ -158,7 +169,7 @@ function FieldScoresTable({ scores }: { scores: FieldScore[] }) {
           </tr>
         ))}
       </tbody>
-    </table>
+    </ScrollTable>
   )
 }
 
@@ -262,7 +273,7 @@ function RowsTable({
       <h3 className="text-sm font-semibold" style={{ color: '#f2f2f4' }}>
         {title}
       </h3>
-      <table className="w-full border-collapse text-sm">
+      <ScrollTable>
         <thead>
           <tr className="border-b text-left" style={{ borderColor: '#26262d' }}>
             {columns.map((col) => (
@@ -283,7 +294,7 @@ function RowsTable({
             </tr>
           ))}
         </tbody>
-      </table>
+      </ScrollTable>
     </div>
   )
 }
@@ -380,15 +391,21 @@ function StructuredView({ result, auditId }: { result: StructuredResult; auditId
 interface ResultsPanelProps {
   result: StructuredResult | SemanticResult | null
   auditId: number | null
+  // Υποχρεωτικό: κανένα αποτέλεσμα δεν εμφανίζεται χωρίς ρητό «σε ποιον αφορά».
+  person: PersonOut
 }
 
-export function ResultsPanel({ result, auditId }: ResultsPanelProps) {
+export function ResultsPanel({ result, auditId, person }: ResultsPanelProps) {
   if (!result || auditId === null) {
     return <EmptyState message="Υποβάλετε ένα ερώτημα για να δείτε αποτελέσματα" />
   }
 
   return (
-    <div className="rounded border p-4" style={{ borderColor: '#26262d', backgroundColor: '#0e0e11' }}>
+    <div
+      className="flex flex-col gap-3 rounded border p-4"
+      style={{ borderColor: '#26262d', backgroundColor: '#0e0e11' }}
+    >
+      <PersonHeading person={person} testId="results-person" />
       {result.mode === 'semantic' ? (
         <SemanticAnswer
           answer={result.answer}
