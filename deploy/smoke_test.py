@@ -96,12 +96,18 @@ def main(
         out(f"{'OK  ' if ok else 'FAIL'} {label}" + (f" ({detail})" if detail else ""))
         return ok
 
+    # Με το semantic κλειστό ο server δεν καλεί καν το Ollama: ollama_reachable
+    # είναι null ("δεν ελέγχθηκε"). true/false σημαίνει semantic ανοιχτό.
     health = _request(f"{base}/api/health")
     body = health.json() or {}
-    check(health.status == 200 and body.get("status") == "ok", "health", f"HTTP {health.status}")
-    if health.status == 200:
-        out(f"     ollama_reachable={body.get('ollama_reachable')} "
-            "(false είναι αναμενόμενο με το semantic κλειστό)")
+    check(
+        health.status == 200
+        and body.get("status") == "ok"
+        and "ollama_reachable" in body
+        and body["ollama_reachable"] is None,
+        "health, Ollama δεν ελέγχεται (semantic κλειστό)",
+        f"HTTP {health.status}, ollama_reachable={json.dumps(body.get('ollama_reachable'))}",
+    )
 
     username = input_fn("Username: ").strip()
     password = getpass_fn("Κωδικός: ")

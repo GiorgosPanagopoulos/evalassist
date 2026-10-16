@@ -178,10 +178,10 @@ cd <CHANGEME_APP_DIR>/backend
    curl -s http://127.0.0.1:<CHANGEME_PORT>/api/health
    ```
 
-   Αναμένεται `{"status":"ok","ollama_reachable":false}`. Το `false` είναι
-   σωστό: με το semantic κλειστό δεν υπάρχει Ollama. Για τον ίδιο λόγο το UI
-   δείχνει πορτοκαλί «Ollama μη διαθέσιμο». **Είναι αναμενόμενο, δεν είναι
-   σφάλμα.**
+   Αναμένεται `{"status":"ok","ollama_reachable":null}`. Το `null` σημαίνει
+   «δεν ελέγχθηκε»: με το semantic κλειστό ο server δεν καλεί καθόλου το
+   Ollama. Το UI δείχνει πράσινο «Σύστημα ενεργό». Αν το API δεν απαντά, το UI
+   δείχνει πορτοκαλί «Σύστημα μη διαθέσιμο».
 
 2. **Login, δομημένη ερώτηση, semantic → 403, logout**
 
