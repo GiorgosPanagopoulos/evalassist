@@ -51,7 +51,12 @@ from app.core.audit import AuditEntry, write_audit  # noqa: E402
 from app.core.config import Settings, get_settings  # noqa: E402
 from app.db import repository  # noqa: E402
 from app.db.database import init_db  # noqa: E402
-from app.models.evaluation import CAREER_PERIOD, EvaluationEntry, EvaluatorInfo, FieldScore  # noqa: E402
+from app.models.evaluation import (  # noqa: E402
+    CAREER_PERIOD,
+    EvaluationEntry,
+    EvaluatorInfo,
+    FieldScore,
+)
 from app.retrieval.models import SemanticResult  # noqa: E402
 
 PERSON_ID = "P-DEPLOY-7731"
