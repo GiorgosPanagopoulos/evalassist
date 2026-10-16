@@ -1,6 +1,7 @@
 import type { OverallFieldScore, SemanticResult, StructuredResult } from '../api/types'
 import { SemanticAnswer } from './SemanticAnswer'
 import { EmptyState } from './EmptyState'
+import { CitationList } from './CitationBadge'
 
 interface Section {
   section: string
@@ -218,6 +219,87 @@ function EntryDetails({ entry, title }: { entry: EvaluationEntry; title?: string
   )
 }
 
+// Τιμές πινάκων VERBATIM όπως στη DB: η πηγή έχει σκόπιμα αλλοιωμένες τιμές
+// (π.χ. "02//02/04/2013"), καμία διόρθωση ή μορφοποίηση ημερομηνιών εδώ.
+// Μόνο το null/απόν εμφανίζεται ως "—".
+function verbatim(value: unknown): string {
+  return value === null || value === undefined ? '—' : String(value)
+}
+
+interface TableColumn {
+  key: string
+  label: string
+  mono?: boolean
+}
+
+const PROMOTION_COLUMNS: TableColumn[] = [
+  { key: 'rank', label: 'Βαθμός' },
+  { key: 'promotion_date', label: 'Ημ. προαγωγής', mono: true },
+  { key: 'decision_date', label: 'Ημ. απόφασης', mono: true },
+  { key: 'decision', label: 'Απόφαση' },
+  { key: 'judged_for', label: 'Κρίθηκε για' },
+]
+
+const SERVICE_TIME_COLUMNS: TableColumn[] = [
+  { key: 'subsection', label: 'Υποενότητα' },
+  { key: 'label', label: 'Περιγραφή' },
+  { key: 'years', label: 'Έτη', mono: true },
+  { key: 'months', label: 'Μήνες', mono: true },
+  { key: 'days', label: 'Ημέρες', mono: true },
+]
+
+function RowsTable({
+  rows,
+  columns,
+  title,
+}: {
+  rows: Record<string, unknown>[]
+  columns: TableColumn[]
+  title: string
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <h3 className="text-sm font-semibold" style={{ color: '#f2f2f4' }}>
+        {title}
+      </h3>
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr className="border-b text-left" style={{ borderColor: '#26262d' }}>
+            {columns.map((col) => (
+              <th key={col.key} className="py-1 pr-2">
+                {col.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, idx) => (
+            <tr key={`${verbatim(row.row_index)}-${idx}`} className="border-b" style={{ borderColor: '#1d1d22' }}>
+              {columns.map((col) => (
+                <td key={col.key} className={col.mono ? 'py-1 pr-2 font-mono' : 'py-1 pr-2'}>
+                  {verbatim(row[col.key])}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// get_promotions_table / get_service_time_table: `data.rows`, ξεχωρίζουν από
+// τα πεδία της πρώτης γραμμής (rank -> προαγωγές, subsection -> χρόνος υπηρεσίας).
+function CareerRows({ rows }: { rows: Record<string, unknown>[] }) {
+  if (rows.length === 0) {
+    return <EmptyState message="Δεν βρέθηκαν εγγραφές" />
+  }
+  if ('subsection' in rows[0]) {
+    return <RowsTable rows={rows} columns={SERVICE_TIME_COLUMNS} title="Συνολικός χρόνος υπηρεσίας" />
+  }
+  return <RowsTable rows={rows} columns={PROMOTION_COLUMNS} title="Κρίσεις προαγωγών" />
+}
+
 function isEvaluationEntry(data: Record<string, unknown>): boolean {
   return (
     'field_scores' in data ||
@@ -283,6 +365,10 @@ function StructuredView({ result, auditId }: { result: StructuredResult; auditId
         isEvaluationEntry(data) && (
           <EntryDetails entry={data as EvaluationEntry} />
         )}
+
+      {Array.isArray(data.rows) && <CareerRows rows={data.rows as Record<string, unknown>[]} />}
+
+      <CitationList citations={result.citations} />
 
       <p className="font-mono text-xs" style={{ color: '#8b8b95' }}>
         Καταχώρηση ελέγχου: #{auditId}

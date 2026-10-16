@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { QueryForm, SEMANTIC_DISABLED_TEXT, type QueryFormApi } from './QueryForm'
+import {
+  CAREER_PERIOD,
+  CAREER_WIDE_TEXT,
+  QueryForm,
+  SEMANTIC_DISABLED_TEXT,
+  type QueryFormApi,
+} from './QueryForm'
 import type { SemanticResult, StructuredResult } from '../api/types'
 
 const PERSONS = [
@@ -17,7 +23,7 @@ const PERIODS: Record<string, string[]> = {
 const structuredResult: StructuredResult = {
   mode: 'structured',
   data: {},
-  sources: [],
+  citations: [],
   retrieved_doc_ids: [],
 }
 
@@ -216,5 +222,86 @@ describe('QueryForm', () => {
       }),
     )
     expect(onResult).toHaveBeenCalledWith(semanticResult, 2)
+  })
+
+  describe('career-wide operations', () => {
+    const CAREER_OPERATIONS = [
+      { value: 'get_promotions_table', label: 'Κρίσεις προαγωγών' },
+      { value: 'get_service_time_table', label: 'Συνολικός χρόνος υπηρεσίας' },
+    ] as const
+
+    it('offers both career-wide operations', () => {
+      render(<QueryForm api={makeFakeApi()} onResult={vi.fn()} />)
+
+      for (const op of CAREER_OPERATIONS) {
+        const option = screen.getByRole('option', { name: op.label }) as HTMLOptionElement
+        expect(option.value).toBe(op.value)
+      }
+    })
+
+    for (const op of CAREER_OPERATIONS) {
+      it(`hides the period field and shows the career-wide text for ${op.value}`, async () => {
+        const user = userEvent.setup()
+        render(<QueryForm api={makeFakeApi()} onResult={vi.fn()} />)
+
+        expect(screen.getByLabelText('Περίοδος')).toBeInTheDocument()
+        await user.selectOptions(screen.getByLabelText('Λειτουργία'), op.value)
+
+        expect(screen.queryByLabelText('Περίοδος')).not.toBeInTheDocument()
+        expect(screen.queryByLabelText('Από')).not.toBeInTheDocument()
+        expect(screen.queryByRole('option', { name: 'Επιλέξτε περίοδο' })).not.toBeInTheDocument()
+        expect(screen.getByTestId('career-wide-note')).toHaveTextContent(CAREER_WIDE_TEXT)
+        expect(screen.getByText('Αφορά όλη τη σταδιοδρομία')).toBeInTheDocument()
+      })
+
+      it(`submits the ${op.value} payload with only the person chosen`, async () => {
+        const api = makeFakeApi()
+        const onResult = vi.fn()
+        const user = userEvent.setup()
+        render(<QueryForm api={api} onResult={onResult} />)
+
+        await screen.findByRole('option', { name: 'Άννα (p1)' })
+        await user.selectOptions(screen.getByLabelText('Άτομο'), 'p1')
+        await user.selectOptions(screen.getByLabelText('Λειτουργία'), op.value)
+        await user.click(screen.getByRole('button', { name: /Υποβολή ερωτήματος/ }))
+
+        await waitFor(() => expect(api.queryStructured).toHaveBeenCalledTimes(1))
+        expect(api.queryStructured).toHaveBeenCalledWith({
+          person_id: 'p1',
+          period: CAREER_PERIOD,
+          operation: op.value,
+        })
+        expect(CAREER_PERIOD).toBe('career')
+        expect(onResult).toHaveBeenCalledWith(structuredResult, 1)
+      })
+    }
+
+    it('shows the period field again when switching back to get_scores', async () => {
+      const api = makeFakeApi()
+      const user = userEvent.setup()
+      render(<QueryForm api={api} onResult={vi.fn()} />)
+
+      await screen.findByRole('option', { name: 'Άννα (p1)' })
+      await user.selectOptions(screen.getByLabelText('Άτομο'), 'p1')
+      await screen.findByRole('option', { name: '2024-Q1' })
+      await user.selectOptions(screen.getByLabelText('Λειτουργία'), 'get_promotions_table')
+      expect(screen.queryByLabelText('Περίοδος')).not.toBeInTheDocument()
+
+      await user.selectOptions(screen.getByLabelText('Λειτουργία'), 'get_scores')
+
+      expect(screen.getByLabelText('Περίοδος')).toBeInTheDocument()
+      expect(screen.queryByTestId('career-wide-note')).not.toBeInTheDocument()
+      // get_scores χρειάζεται ξανά περίοδο για submit
+      expect(screen.getByRole('button', { name: /Υποβολή ερωτήματος/ })).toBeDisabled()
+      await user.selectOptions(screen.getByLabelText('Περίοδος'), '2024-Q1')
+      await user.click(screen.getByRole('button', { name: /Υποβολή ερωτήματος/ }))
+      await waitFor(() =>
+        expect(api.queryStructured).toHaveBeenCalledWith({
+          person_id: 'p1',
+          period: '2024-Q1',
+          operation: 'get_scores',
+        }),
+      )
+    })
   })
 })

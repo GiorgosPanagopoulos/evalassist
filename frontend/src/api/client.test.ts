@@ -39,7 +39,7 @@ describe('ApiClient', () => {
   })
 
   it('queryStructured POSTs the exact request body to /query/structured', async () => {
-    const response = { result: { mode: 'structured', data: {}, sources: [], retrieved_doc_ids: [] }, audit_id: 7 }
+    const response = { result: { mode: 'structured', data: {}, citations: [], retrieved_doc_ids: [] }, audit_id: 7 }
     const fetchFn = fakeFetch(200, response)
     const client = new ApiClient(BASE_URL, fetchFn as unknown as typeof fetch)
 
