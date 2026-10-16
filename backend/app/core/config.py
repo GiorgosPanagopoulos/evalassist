@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     COOKIE_PATH: str = "/"
     # /docs, /redoc, /openapi.json: κλειστά εκτός αν ζητηθούν ρητά.
     ENABLE_DOCS: bool = False
+    # Semantic path (RAG): κλειστό by default, ώστε ένα deploy που ξεχνά τη
+    # ρύθμιση να είναι ασφαλές. Ανοίγει ρητά μόνο στις μηχανές ανάπτυξης.
+    SEMANTIC_ENABLED: bool = False
+    # uvicorn.access γράφει URLs, που περιέχουν person_id. Κλειστό by default
+    # (βλ. app.api.main lifespan).
+    ACCESS_LOG: bool = False
 
     @property
     def resolved_gen_model(self) -> str:

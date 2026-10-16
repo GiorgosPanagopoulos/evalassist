@@ -21,7 +21,12 @@ interface QueryFormProps {
   onResult: (result: StructuredResult | SemanticResult, auditId: number) => void
   onError?: (error: ApiError) => void
   onModeLabelChange?: (label: string) => void
+  // features.semantic_enabled από το /api/auth/me. Ο server απαντά έτσι κι
+  // αλλιώς 403 όταν είναι κλειστό· εδώ απλώς δεν προσφέρεται η επιλογή.
+  semanticEnabled?: boolean
 }
+
+export const SEMANTIC_DISABLED_TEXT = 'Η σημασιολογική αναζήτηση δεν είναι ενεργή σε αυτή την εγκατάσταση.'
 
 const OPERATIONS: { value: StructuredOperation; label: string }[] = [
   { value: 'get_scores', label: 'Βαθμολογίες' },
@@ -62,7 +67,7 @@ const CHEVRON_BG = {
     "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%234a4a55' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
 }
 
-export function QueryForm({ api, onResult, onError, onModeLabelChange }: QueryFormProps) {
+export function QueryForm({ api, onResult, onError, onModeLabelChange, semanticEnabled = true }: QueryFormProps) {
   const [persons, setPersons] = useState<PersonOut[]>([])
   const [periods, setPeriods] = useState<string[]>([])
   const [personId, setPersonId] = useState('')
@@ -78,6 +83,10 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange }: QueryFo
   useEffect(() => {
     onModeLabelChange?.(mode === 'semantic' ? 'σημασιολογική' : MODE_LABELS[operation])
   }, [mode, operation, onModeLabelChange])
+
+  useEffect(() => {
+    if (!semanticEnabled) setMode('structured')
+  }, [semanticEnabled])
 
   useEffect(() => {
     api.getPersons().then(setPersons)
@@ -257,12 +266,20 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange }: QueryFo
             type="button"
             onClick={() => setMode('semantic')}
             aria-pressed={mode === 'semantic'}
-            className="flex-1 rounded-md px-3 py-1.5 text-[12px] font-semibold"
+            disabled={!semanticEnabled}
+            title={semanticEnabled ? undefined : SEMANTIC_DISABLED_TEXT}
+            aria-describedby={semanticEnabled ? undefined : 'semantic-disabled-note'}
+            className="flex-1 rounded-md px-3 py-1.5 text-[12px] font-semibold disabled:cursor-not-allowed disabled:opacity-40"
             style={mode === 'semantic' ? ACTIVE_SEMANTIC_SEGMENT_STYLE : INACTIVE_SEGMENT_STYLE}
           >
             Σημασιολογική
           </button>
         </div>
+        {!semanticEnabled && (
+          <p id="semantic-disabled-note" className="text-[11px]" style={{ color: '#6d6d78' }}>
+            {SEMANTIC_DISABLED_TEXT}
+          </p>
+        )}
       </div>
 
       {mode === 'structured' ? (

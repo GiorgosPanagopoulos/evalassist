@@ -102,11 +102,16 @@ export interface TimelineResponse {
 
 export type UserRole = 'admin' | 'user'
 
+export interface Features {
+  semantic_enabled: boolean
+}
+
 export interface Me {
   id: number
   username: string
   role: UserRole
   must_change_pw: boolean
+  features: Features
 }
 
 export interface UserOut {

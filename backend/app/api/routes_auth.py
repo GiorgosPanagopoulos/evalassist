@@ -8,7 +8,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.api.deps import get_db
-from app.api.schemas import ChangePasswordRequest, LoginRequest, MeResponse
+from app.api.schemas import ChangePasswordRequest, Features, LoginRequest, MeResponse
 from app.auth import service
 from app.auth.deps import SESSION_COOKIE, Clock, SessionUser, get_clock, get_current_session
 from app.core.config import Settings, get_settings
@@ -27,6 +27,19 @@ def _set_session_cookie(response: Response, token: str, settings: Settings) -> N
         secure=settings.COOKIE_SECURE,
         httponly=True,
         samesite="strict",
+    )
+
+
+def _me(
+    user_id: int, username: str, role: str, must_change_pw: bool, settings: Settings
+) -> MeResponse:
+    """Κοινό σώμα για /login και /me, μαζί με τα features της εγκατάστασης."""
+    return MeResponse(
+        id=user_id,
+        username=username,
+        role=role,
+        must_change_pw=must_change_pw,
+        features=Features(semantic_enabled=settings.SEMANTIC_ENABLED),
     )
 
 
@@ -59,12 +72,7 @@ def login(
         service.discard_session_token(conn, previous)
     token = service.create_session(conn, user["id"], user["username"], now, settings.SESSION_HOURS)
     _set_session_cookie(response, token, settings)
-    return MeResponse(
-        id=user["id"],
-        username=user["username"],
-        role=user["role"],
-        must_change_pw=bool(user["must_change_pw"]),
-    )
+    return _me(user["id"], user["username"], user["role"], bool(user["must_change_pw"]), settings)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -81,10 +89,11 @@ def logout(
 
 
 @router.get("/me", response_model=MeResponse)
-def me(user: SessionUser = Depends(get_current_session)) -> MeResponse:
-    return MeResponse(
-        id=user.id, username=user.username, role=user.role, must_change_pw=user.must_change_pw
-    )
+def me(
+    user: SessionUser = Depends(get_current_session),
+    settings: Settings = Depends(get_settings),
+) -> MeResponse:
+    return _me(user.id, user.username, user.role, user.must_change_pw, settings)
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)

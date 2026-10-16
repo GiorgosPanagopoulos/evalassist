@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { QueryForm, type QueryFormApi } from './QueryForm'
+import { QueryForm, SEMANTIC_DISABLED_TEXT, type QueryFormApi } from './QueryForm'
 import type { SemanticResult, StructuredResult } from '../api/types'
 
 const PERSONS = [
@@ -86,6 +86,28 @@ describe('QueryForm', () => {
 
     await user.click(screen.getByRole('button', { name: 'Δομημένη' }))
     expect(screen.getByLabelText('Λειτουργία')).toBeInTheDocument()
+  })
+
+  it('disables the Σημασιολογική option with an explanation when semanticEnabled=false', async () => {
+    const api = makeFakeApi()
+    const user = userEvent.setup()
+    render(<QueryForm api={api} onResult={vi.fn()} semanticEnabled={false} />)
+
+    const semantic = screen.getByRole('button', { name: 'Σημασιολογική' })
+    expect(semantic).toBeDisabled()
+    expect(semantic).toHaveAttribute('title', SEMANTIC_DISABLED_TEXT)
+    expect(screen.getByText(SEMANTIC_DISABLED_TEXT)).toBeInTheDocument()
+
+    await user.click(semantic)
+    expect(screen.queryByLabelText('Ερώτηση')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Λειτουργία')).toBeInTheDocument()
+    expect(api.querySemantic).not.toHaveBeenCalled()
+  })
+
+  it('enables the Σημασιολογική option by default, without the explanation', () => {
+    render(<QueryForm api={makeFakeApi()} onResult={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Σημασιολογική' })).toBeEnabled()
+    expect(screen.queryByText(SEMANTIC_DISABLED_TEXT)).not.toBeInTheDocument()
   })
 
   it('replaces the single period field with an Από/Έως pair for compare_periods', async () => {

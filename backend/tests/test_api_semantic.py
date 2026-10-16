@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from auth_helpers import logged_in_client  # noqa: E402
 
-from app.api.deps import get_semantic_retriever  # noqa: E402
+from app.api.deps import get_semantic_retriever_factory  # noqa: E402
 from app.api.main import app  # noqa: E402
 from app.core.config import Settings, get_settings  # noqa: E402
 from app.core.exceptions import LLMUnavailableError  # noqa: E402
@@ -143,7 +143,7 @@ def _make_temp_db() -> Path:
 
 
 def _override_settings(db_path: Path) -> None:
-    test_settings = Settings(_env_file=None, DB_PATH=db_path)
+    test_settings = Settings(_env_file=None, DB_PATH=db_path, SEMANTIC_ENABLED=True)
     app.dependency_overrides[get_settings] = lambda: test_settings
 
 
@@ -163,7 +163,7 @@ def test_response_embeds_result_and_audit_id():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        app.dependency_overrides[get_semantic_retriever] = lambda: FakeSemanticRetriever()
+        app.dependency_overrides[get_semantic_retriever_factory] = lambda: lambda: FakeSemanticRetriever()
         client = logged_in_client(app, db_path)
 
         response = client.post(
@@ -185,7 +185,7 @@ def test_audit_row_has_semantic_mode_and_citation_doc_ids():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        app.dependency_overrides[get_semantic_retriever] = lambda: FakeSemanticRetriever()
+        app.dependency_overrides[get_semantic_retriever_factory] = lambda: lambda: FakeSemanticRetriever()
         client = logged_in_client(app, db_path)
 
         response = client.post(
@@ -211,7 +211,7 @@ def test_audit_row_records_unsupported_ranks_when_flagged():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        app.dependency_overrides[get_semantic_retriever] = lambda: (
+        app.dependency_overrides[get_semantic_retriever_factory] = lambda: lambda: (
             FakeUnsupportedRankSemanticRetriever()
         )
         client = logged_in_client(app, db_path)
@@ -235,7 +235,7 @@ def test_empty_scope_returns_200_with_empty_audit_doc_ids():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        app.dependency_overrides[get_semantic_retriever] = lambda: FakeEmptySemanticRetriever()
+        app.dependency_overrides[get_semantic_retriever_factory] = lambda: lambda: FakeEmptySemanticRetriever()
         client = logged_in_client(app, db_path)
 
         response = client.post(
@@ -262,7 +262,7 @@ def test_llm_failure_after_retrieval_audits_retrieved_doc_ids():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        app.dependency_overrides[get_semantic_retriever] = lambda: (
+        app.dependency_overrides[get_semantic_retriever_factory] = lambda: lambda: (
             FakeLLMFailureAfterRetrievalRetriever()
         )
         client = logged_in_client(app, db_path)
@@ -294,7 +294,7 @@ def test_pre_retrieval_failure_audits_empty_doc_ids():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        app.dependency_overrides[get_semantic_retriever] = lambda: (
+        app.dependency_overrides[get_semantic_retriever_factory] = lambda: lambda: (
             FakePreRetrievalFailureRetriever()
         )
         client = logged_in_client(app, db_path)
@@ -325,7 +325,7 @@ def test_routing_hint_present_when_question_matches_heuristic():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        app.dependency_overrides[get_semantic_retriever] = lambda: FakeSemanticRetriever()
+        app.dependency_overrides[get_semantic_retriever_factory] = lambda: lambda: FakeSemanticRetriever()
         client = logged_in_client(app, db_path)
 
         response = client.post(
@@ -348,7 +348,7 @@ def test_routing_hint_absent_when_question_does_not_match_heuristic():
     db_path = _make_temp_db()
     try:
         _override_settings(db_path)
-        app.dependency_overrides[get_semantic_retriever] = lambda: FakeSemanticRetriever()
+        app.dependency_overrides[get_semantic_retriever_factory] = lambda: lambda: FakeSemanticRetriever()
         client = logged_in_client(app, db_path)
 
         response = client.post(
@@ -366,7 +366,7 @@ def test_routing_hint_absent_when_question_does_not_match_heuristic():
 def _post_with_recording_retriever(db_path: Path, payload: dict):
     _override_settings(db_path)
     retriever = RecordingRetriever()
-    app.dependency_overrides[get_semantic_retriever] = lambda: retriever
+    app.dependency_overrides[get_semantic_retriever_factory] = lambda: lambda: retriever
     response = logged_in_client(app, db_path).post("/api/query/semantic", json=payload)
     return response, retriever
 

@@ -51,6 +51,24 @@ ALL_STATUSES = ["PASS", "FAIL", "NOT_IMPLEMENTED", "ERROR", "KNOWN_GAP", "MANUAL
 
 SESSION_COOKIE = "evalassist_session"
 
+SEMANTIC_DISABLED_CODE = "semantic_disabled"
+
+
+class SemanticDisabled(Exception):
+    """Ο server απάντησε 403 semantic_disabled: κάθε semantic ερώτηση θα
+    αποτύγχανε με τον ίδιο τρόπο, άρα το run σταματά αντί να γράψει ERROR."""
+
+
+def _raise_if_semantic_disabled(resp):
+    if resp.status_code != 403:
+        return
+    try:
+        code = resp.json().get("code")
+    except ValueError:
+        return
+    if code == SEMANTIC_DISABLED_CODE:
+        raise SemanticDisabled()
+
 
 def read_credentials():
     user = os.environ.get("EVALASSIST_USER", "")
@@ -204,6 +222,7 @@ def _apply_check_routing(client, base_url, q, check_routing, row, timeout):
     except httpx.HTTPError as exc:
         row["routing_check"] = f"ERROR {exc}"
         return row
+    _raise_if_semantic_disabled(resp)
     if resp.status_code >= 400:
         row["routing_check"] = f"ERROR {resp.status_code}"
         return row
@@ -232,6 +251,7 @@ def _run_semantic(client, base_url, q, tier, csv_rows, timeout):
         row["error"] = str(exc)
         return row
 
+    _raise_if_semantic_disabled(resp)
     row["http_status"] = resp.status_code
     if resp.status_code >= 400:
         row["status"] = "ERROR"
@@ -393,12 +413,16 @@ def main():
         out_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        for q in questions:
-            if q["tier"] == "A":
-                row = run_tier_a(client, args.base_url, q, args.check_routing, args.timeout)
-            else:
-                row = _run_semantic(client, args.base_url, q, q["tier"], csv_rows, args.timeout)
-            rows.append(row)
+        try:
+            for q in questions:
+                if q["tier"] == "A":
+                    row = run_tier_a(client, args.base_url, q, args.check_routing, args.timeout)
+                else:
+                    row = _run_semantic(client, args.base_url, q, q["tier"], csv_rows, args.timeout)
+                rows.append(row)
+        except SemanticDisabled:
+            print("STOP: SEMANTIC_ENABLED=false στον server", file=sys.stderr)
+            sys.exit(1)
 
     results_path = out_dir / f"results_{timestamp}.jsonl"
     with open(results_path, "w", encoding="utf-8") as fh:

@@ -71,5 +71,8 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: No external URLs in the build (offline runtime)
+        run: npm run check:dist
+
       - name: Run tests
         run: npm test
