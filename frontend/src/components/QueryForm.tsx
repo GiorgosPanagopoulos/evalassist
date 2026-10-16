@@ -18,12 +18,18 @@ export type QueryFormApi = Pick<
 
 interface QueryFormProps {
   api: QueryFormApi
-  onResult: (result: StructuredResult | SemanticResult, auditId: number) => void
+  // personId: το άτομο ΤΟΥ ΑΙΤΗΜΑΤΟΣ, ώστε ο γονέας να απορρίπτει απάντηση που
+  // φτάνει αφού ο χρήστης έχει ήδη αλλάξει άτομο.
+  onResult: (result: StructuredResult | SemanticResult, auditId: number, personId: string) => void
   onError?: (error: ApiError) => void
   onModeLabelChange?: (label: string) => void
   // features.semantic_enabled από το /api/auth/me. Ο server απαντά έτσι κι
   // αλλιώς 403 όταν είναι κλειστό· εδώ απλώς δεν προσφέρεται η επιλογή.
   semanticEnabled?: boolean
+  // Controlled επιλογή ατόμου (μία πηγή αλήθειας στο App). Χωρίς personId το
+  // component κρατά δικό του state (π.χ. μεμονωμένα tests).
+  personId?: string
+  onPersonChange?: (person: PersonOut | null) => void
 }
 
 export const SEMANTIC_DISABLED_TEXT = 'Η σημασιολογική αναζήτηση δεν είναι ενεργή σε αυτή την εγκατάσταση.'
@@ -81,10 +87,19 @@ const CHEVRON_BG = {
     "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%234a4a55' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
 }
 
-export function QueryForm({ api, onResult, onError, onModeLabelChange, semanticEnabled = true }: QueryFormProps) {
+export function QueryForm({
+  api,
+  onResult,
+  onError,
+  onModeLabelChange,
+  semanticEnabled = true,
+  personId: controlledPersonId,
+  onPersonChange,
+}: QueryFormProps) {
   const [persons, setPersons] = useState<PersonOut[]>([])
   const [periods, setPeriods] = useState<string[]>([])
-  const [personId, setPersonId] = useState('')
+  const [ownPersonId, setOwnPersonId] = useState('')
+  const personId = controlledPersonId ?? ownPersonId
   const [period, setPeriod] = useState('')
   const [mode, setMode] = useState<Mode>('structured')
   const [operation, setOperation] = useState<StructuredOperation>('get_scores')
@@ -126,6 +141,11 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange, semanticE
   const canSubmit =
     Boolean(personId) && (careerWide || Boolean(period)) && !questionTooShort && !compareMissingOtherPeriod
 
+  function handlePersonChange(nextId: string) {
+    setOwnPersonId(nextId)
+    onPersonChange?.(persons.find((p) => p.person_id === nextId) ?? null)
+  }
+
   function handleOperationChange(next: StructuredOperation) {
     setOperation(next)
     setOtherPeriod('')
@@ -146,14 +166,14 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange, semanticE
           ...(operation === 'compare_periods' ? { other_period: otherPeriod } : {}),
           ...(operation === 'top_bottom_sections' && n ? { n: Number(n) } : {}),
         })
-        onResult(response.result, response.audit_id)
+        onResult(response.result, response.audit_id, personId)
       } else {
         const response = await api.querySemantic({
           person_id: personId,
           period,
           question: question.trim(),
         })
-        onResult(response.result, response.audit_id)
+        onResult(response.result, response.audit_id, personId)
       }
     } catch (err) {
       const apiError = err as ApiError
@@ -186,7 +206,7 @@ export function QueryForm({ api, onResult, onError, onModeLabelChange, semanticE
         <select
           aria-label="Άτομο"
           value={personId}
-          onChange={(e) => setPersonId(e.target.value)}
+          onChange={(e) => handlePersonChange(e.target.value)}
           className={SELECT_CLASS}
           style={personSelectStyle(personId)}
         >

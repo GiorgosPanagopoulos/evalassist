@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ResultsPanel } from './ResultsPanel'
-import type { SemanticResult, StructuredResult } from '../api/types'
+import type { PersonOut, SemanticResult, StructuredResult } from '../api/types'
+
+const PERSON: PersonOut = { person_id: 'p1', name: 'Συνθετικός Α' }
 
 describe('ResultsPanel', () => {
   it('renders a semantic result with the answer, all citations, and the audit id', () => {
@@ -18,7 +20,7 @@ describe('ResultsPanel', () => {
       routing_hint: null,
     }
 
-    render(<ResultsPanel result={result} auditId={42} />)
+    render(<ResultsPanel person={PERSON} result={result} auditId={42} />)
 
     expect(screen.getByText(result.answer)).toBeInTheDocument()
     expect(screen.getByText(/doc-1/)).toBeInTheDocument()
@@ -40,7 +42,7 @@ describe('ResultsPanel', () => {
       routing_hint: null,
     }
 
-    render(<ResultsPanel result={result} auditId={1} />)
+    render(<ResultsPanel person={PERSON} result={result} auditId={1} />)
 
     expect(
       screen.getByText('Συμβουλευτικό περιεχόμενο - απαιτείται ανθρώπινη αξιολόγηση'),
@@ -57,7 +59,7 @@ describe('ResultsPanel', () => {
       routing_hint: null,
     }
 
-    render(<ResultsPanel result={result} auditId={5} />)
+    render(<ResultsPanel person={PERSON} result={result} auditId={5} />)
 
     expect(screen.getByText('Δεν βρέθηκαν δεδομένα στο εύρος')).toBeInTheDocument()
     // ReviewBanner must still be present even for the empty-scope case.
@@ -83,7 +85,7 @@ describe('ResultsPanel', () => {
       retrieved_doc_ids: ['doc-1'],
     }
 
-    render(<ResultsPanel result={result} auditId={10} />)
+    render(<ResultsPanel person={PERSON} result={result} auditId={10} />)
 
     expect(screen.getByText('Επικοινωνία')).toBeInTheDocument()
     expect(screen.getByText('9')).toBeInTheDocument()
@@ -103,7 +105,7 @@ describe('ResultsPanel', () => {
       routing_hint: 'structured',
     }
 
-    render(<ResultsPanel result={result} auditId={1} />)
+    render(<ResultsPanel person={PERSON} result={result} auditId={1} />)
 
     const banner = screen.getByText('Το ερώτημα αφορά βαθμολογία - δοκιμάστε Δομημένη αναζήτηση')
     expect(banner).toBeInTheDocument()
@@ -125,7 +127,7 @@ describe('ResultsPanel', () => {
       routing_hint: null,
     }
 
-    render(<ResultsPanel result={result} auditId={1} />)
+    render(<ResultsPanel person={PERSON} result={result} auditId={1} />)
 
     expect(
       screen.queryByText('Το ερώτημα αφορά βαθμολογία - δοκιμάστε Δομημένη αναζήτηση'),
@@ -150,7 +152,7 @@ describe('ResultsPanel', () => {
       retrieved_doc_ids: ['doc-1'],
     }
 
-    render(<ResultsPanel result={result} auditId={11} />)
+    render(<ResultsPanel person={PERSON} result={result} auditId={11} />)
 
     expect(screen.getByText('Συνολική κρίση (εκτός κατάταξης)')).toBeInTheDocument()
     expect(screen.getByText('ΓΕΝΙΚΗ ΙΚΑΝΟΤΗΤΑ ΓΙΑ ΤΟΝ KATEXOMENO ΒΑΘΜΟ')).toBeInTheDocument()
@@ -174,7 +176,7 @@ describe('ResultsPanel', () => {
       retrieved_doc_ids: ['doc-1'],
     }
 
-    render(<ResultsPanel result={result} auditId={12} />)
+    render(<ResultsPanel person={PERSON} result={result} auditId={12} />)
 
     // απουσία, όχι μήνυμα "δεν υπάρχει"
     expect(screen.queryByText('Συνολική κρίση (εκτός κατάταξης)')).not.toBeInTheDocument()
@@ -192,7 +194,7 @@ describe('ResultsPanel', () => {
       refusal_reason: 'year_out_of_range',
     }
 
-    render(<ResultsPanel result={result} auditId={11} />)
+    render(<ResultsPanel person={PERSON} result={result} auditId={11} />)
 
     expect(screen.getByTestId('refusal')).toBeInTheDocument()
     expect(screen.getByText(result.answer)).toBeInTheDocument()
@@ -200,7 +202,7 @@ describe('ResultsPanel', () => {
   })
 
   it('shows a placeholder when there is no result yet', () => {
-    render(<ResultsPanel result={null} auditId={null} />)
+    render(<ResultsPanel person={PERSON} result={null} auditId={null} />)
 
     expect(screen.getByText('Υποβάλετε ένα ερώτημα για να δείτε αποτελέσματα')).toBeInTheDocument()
   })
@@ -213,7 +215,7 @@ describe('ResultsPanel', () => {
       retrieved_doc_ids: ['doc-a'],
     }
 
-    render(<ResultsPanel result={result} auditId={21} />)
+    render(<ResultsPanel person={PERSON} result={result} auditId={21} />)
 
     const citations = screen.getByTestId('citations')
     expect(citations).toHaveTextContent('doc-a')
@@ -229,7 +231,7 @@ describe('ResultsPanel', () => {
       retrieved_doc_ids: ['doc-career'],
     }
 
-    render(<ResultsPanel result={result} auditId={22} />)
+    render(<ResultsPanel person={PERSON} result={result} auditId={22} />)
 
     const citations = screen.getByTestId('citations')
     expect(citations).toHaveTextContent('σελίδα δεν καταγράφηκε')
@@ -257,7 +259,7 @@ describe('ResultsPanel', () => {
       retrieved_doc_ids: ['doc-career'],
     }
 
-    render(<ResultsPanel result={result} auditId={23} />)
+    render(<ResultsPanel person={PERSON} result={result} auditId={23} />)
 
     expect(screen.getByText('Κρίσεις προαγωγών')).toBeInTheDocument()
     expect(screen.getByText('02//02/04/2013')).toBeInTheDocument()
@@ -280,7 +282,7 @@ describe('ResultsPanel', () => {
       retrieved_doc_ids: ['doc-career'],
     }
 
-    render(<ResultsPanel result={result} auditId={24} />)
+    render(<ResultsPanel person={PERSON} result={result} auditId={24} />)
 
     expect(screen.getByText('Συνολικός χρόνος υπηρεσίας')).toBeInTheDocument()
     expect(screen.getByText('ΠΡΑΓΜΑΤΙΚΗ ΥΠΗΡΕΣΙΑ')).toBeInTheDocument()
@@ -297,10 +299,38 @@ describe('ResultsPanel', () => {
       retrieved_doc_ids: [],
     }
 
-    render(<ResultsPanel result={result} auditId={25} />)
+    render(<ResultsPanel person={PERSON} result={result} auditId={25} />)
 
     expect(screen.getByText('Δεν βρέθηκαν εγγραφές')).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     expect(screen.getByTestId('citations')).toHaveTextContent('Καμία παραπομπή')
+  })
+
+  it('states at the top which person the results are about', () => {
+    const result: StructuredResult = { mode: 'structured', data: {}, citations: [], retrieved_doc_ids: [] }
+
+    const { rerender } = render(<ResultsPanel person={PERSON} result={result} auditId={30} />)
+    expect(screen.getByTestId('results-person')).toHaveTextContent('Άτομο: Συνθετικός Α (p1)')
+
+    rerender(<ResultsPanel person={{ person_id: 'p9', name: '' }} result={result} auditId={30} />)
+    expect(screen.getByTestId('results-person')).toHaveTextContent('Άτομο: (p9)')
+  })
+
+  it('wraps career tables in their own horizontal scroll container', () => {
+    const result: StructuredResult = {
+      mode: 'structured',
+      data: {
+        person_id: 'p1',
+        rows: [{ row_index: 0, subsection: 'α', label: 'ΠΡΑΓΜΑΤΙΚΗ ΥΠΗΡΕΣΙΑ', years: 1, months: 2, days: 3 }],
+      },
+      citations: [],
+      retrieved_doc_ids: [],
+    }
+
+    render(<ResultsPanel person={PERSON} result={result} auditId={31} />)
+
+    const table = screen.getByRole('table')
+    expect(table.parentElement).toHaveAttribute('data-testid', 'table-scroll')
+    expect(table.parentElement).toHaveClass('overflow-x-auto')
   })
 })
