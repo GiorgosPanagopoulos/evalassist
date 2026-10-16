@@ -5,12 +5,16 @@
     refactor παραμένουν οι ίδιες.
   - env override: μεταβλητές περιβάλλοντος υπερισχύουν των defaults.
   - get_settings(): singleton (lru_cache) accessor.
+  - .env με UTF-8 BOM: η πρώτη ρύθμιση εφαρμόζεται (utf-8-sig), όπως και
+    χωρίς BOM, και οι ελληνικοί χαρακτήρες διαβάζονται σωστά και στα δύο.
 
 Εκτελείται standalone: `python tests/test_config.py`
 """
 
 import os
 import sys
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -79,6 +83,58 @@ def test_deterministic_generation_env_override():
         del os.environ["OLLAMA_KEEP_ALIVE"]
 
 
+UTF8_BOM = b"\xef\xbb\xbf"
+UNIQUE_DB_PATH = "/tmp/env-bom-unique-5c1e/evalassist.db"
+# Ρυθμίσεις που ορίζουν τα .env αυτών των tests: δεν πρέπει να έρχονται από
+# το περιβάλλον της διεργασίας, που υπερισχύει του αρχείου.
+_ENV_FILE_KEYS = ("DB_PATH", "SESSION_HOURS", "OLLAMA_GEN_MODEL")
+
+
+@contextmanager
+def _env_file(body: str, bom: bool):
+    """Προσωρινό .env (με ή χωρίς BOM). Το Settings το διαβάζει με το
+    env_file_encoding του model_config, όπως το backend/.env."""
+    saved = {key: os.environ.pop(key) for key in _ENV_FILE_KEYS if key in os.environ}
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / ".env"
+        path.write_bytes((UTF8_BOM if bom else b"") + body.encode("utf-8"))
+        try:
+            yield path
+        finally:
+            os.environ.update(saved)
+
+
+def _posix(path: Path) -> str:
+    return str(path).replace(os.sep, "/")
+
+
+def test_env_file_with_bom_applies_first_setting():
+    with _env_file(f"DB_PATH={UNIQUE_DB_PATH}\nSESSION_HOURS=3\n", bom=True) as path:
+        assert path.read_bytes().startswith(UTF8_BOM)
+        settings = Settings(_env_file=path)
+    assert _posix(settings.DB_PATH) == UNIQUE_DB_PATH
+    assert settings.SESSION_HOURS == 3
+
+
+def test_env_file_without_bom_applies_first_setting():
+    with _env_file(f"DB_PATH={UNIQUE_DB_PATH}\nSESSION_HOURS=3\n", bom=False) as path:
+        assert not path.read_bytes().startswith(UTF8_BOM)
+        settings = Settings(_env_file=path)
+    assert _posix(settings.DB_PATH) == UNIQUE_DB_PATH
+    assert settings.SESSION_HOURS == 3
+
+
+def test_env_file_greek_values_with_and_without_bom():
+    greek_db = "/tmp/φάκελος-δοκιμής/αξιολογήσεις.db"
+    greek_model = "μοντέλο-Ελληνικά-ΆΈΉ-ϊΰ"
+    body = f"DB_PATH={greek_db}\nOLLAMA_GEN_MODEL={greek_model}\n"
+    for bom in (True, False):
+        with _env_file(body, bom=bom) as path:
+            settings = Settings(_env_file=path)
+        assert _posix(settings.DB_PATH) == greek_db, bom
+        assert settings.OLLAMA_GEN_MODEL == greek_model, bom
+
+
 def run_all():
     tests = [
         test_defaults_match_previous_hardcoded_values,
@@ -86,6 +142,9 @@ def run_all():
         test_get_settings_is_a_cached_singleton,
         test_resolved_gen_model_falls_back_to_ollama_model,
         test_deterministic_generation_env_override,
+        test_env_file_with_bom_applies_first_setting,
+        test_env_file_without_bom_applies_first_setting,
+        test_env_file_greek_values_with_and_without_bom,
     ]
     for test in tests:
         test()
