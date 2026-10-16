@@ -320,20 +320,15 @@ def test_real_db_m01253_if_present():
         assert response.status_code == 200, response.text
         _assert_m01253_shape(response.json()["result"]["points"])
         # Το migration έτρεξε στο αντίγραφο της πραγματικής ΒΔ: η νέα γραμμή
-        # έχει scope, οι παλιές μένουν NULL.
+        # γράφεται με scope. Το no-backfill ελέγχεται στο test_audit_integrity.py,
+        # όχι εδώ: οι παλιές γραμμές της πραγματικής ΒΔ αλλάζουν με τη χρήση.
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         row = conn.execute(
             "SELECT * FROM audit_log WHERE id = ?", (response.json()["audit_id"],)
         ).fetchone()
-        old_with_scope = conn.execute(
-            "SELECT COUNT(*) FROM audit_log WHERE id < ? AND "
-            "(person_id IS NOT NULL OR period IS NOT NULL OR other_period IS NOT NULL)",
-            (row["id"],),
-        ).fetchone()[0]
         conn.close()
         assert (row["person_id"], row["period"], row["other_period"]) == (PERSON, "all", None)
-        assert old_with_scope == 0
     finally:
         _clear_overrides()
         os.remove(db_path)

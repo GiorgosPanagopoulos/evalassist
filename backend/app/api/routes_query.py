@@ -12,7 +12,7 @@ retrieval και χωρίς LLM."""
 import json
 import logging
 import sqlite3
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
@@ -33,7 +33,6 @@ from app.retrieval.isolation import IsolationScope
 from app.retrieval.models import SemanticResult
 from app.retrieval.precheck import PRECHECK_MODEL, PrecheckRefusal, check_question, validate_period
 from app.retrieval.routing import route_query
-from app.retrieval.semantic import SemanticRetriever
 from app.retrieval.structured import (
     compare_periods,
     get_promotions_table,
@@ -41,6 +40,10 @@ from app.retrieval.structured import (
     get_service_time_table,
     top_bottom_sections,
 )
+
+if TYPE_CHECKING:
+    # Μόνο για type checking, βλ. app.api.deps: χωρίς chromadb/requests στο startup.
+    from app.retrieval.semantic import SemanticRetriever
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -156,7 +159,7 @@ def query_structured(
 def query_semantic(
     request: SemanticQueryRequest,
     conn: sqlite3.Connection = Depends(get_db),
-    make_retriever: Callable[[], SemanticRetriever] = Depends(get_semantic_retriever_factory),
+    make_retriever: "Callable[[], SemanticRetriever]" = Depends(get_semantic_retriever_factory),
     settings: Settings = Depends(get_settings),
     user: SessionUser = Depends(require_user),
 ) -> SemanticQueryResponse | JSONResponse:
