@@ -49,6 +49,14 @@ class Settings(BaseSettings):
     # uvicorn.access γράφει URLs, που περιέχουν person_id. Κλειστό by default
     # (βλ. app.api.main lifespan).
     ACCESS_LOG: bool = False
+    # Αποκλειστικός φάκελος των PDF για το GET .../documents/{doc_id}/file.
+    # None (default): το endpoint απαντά πάντα 404, ώστε ένα deploy που ξεχνά
+    # τη ρύθμιση να μη σερβίρει αρχεία. Τα σχετικά paths του documents.path
+    # επιλύονται ως προς αυτόν.
+    DOCS_ROOT: Path | None = None
+    # Μέγιστο μέγεθος PDF που σερβίρεται: το αρχείο διαβάζεται ολόκληρο στη
+    # μνήμη για τον έλεγχο του hash.
+    MAX_DOC_BYTES: int = 50 * 1024 * 1024
 
     @property
     def resolved_gen_model(self) -> str:

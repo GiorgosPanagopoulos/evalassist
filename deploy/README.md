@@ -99,6 +99,8 @@ app διαβάζει μόνο το `backend/.env` και μεταβλητές π
 
 - `SEMANTIC_ENABLED=false`, `ACCESS_LOG=false`, `ENABLE_DOCS=false`: μένουν ως έχουν.
 - `DB_PATH`: absolute path της βάσης του βήματος 5.
+- `DOCS_ROOT`: absolute path του φακέλου των PDF (βήμα 5α). Χωρίς αυτό, το
+  άνοιγμα PDF απαντά πάντα 404.
 - `COOKIE_SECURE=true`: το session cookie στέλνεται μόνο σε HTTPS.
 - `COOKIE_PATH`: εξαρτάται από το portal, βλ. την αντίστοιχη ενότητα.
 
@@ -158,6 +160,47 @@ icacls <CHANGEME_DATA_DIR> /inheritance:r /grant:r "<CHANGEME_SERVICE_USER>:(OI)
 
 Τα ίδια ισχύουν για το `<CHANGEME_BACKUP_DIR>`: τα backups είναι πλήρη
 αντίγραφα της βάσης.
+
+## 5α. Φάκελος PDF (`DOCS_ROOT`)
+
+Το `GET /api/person/{person_id}/documents/{doc_id}/file` σερβίρει τα PDF των
+αξιολογήσεων. Χωρίς `DOCS_ROOT` το endpoint απαντά πάντα 404, και αυτή είναι
+η default ρύθμιση.
+
+- **Στην παραγωγή το `DOCS_ROOT` είναι αποκλειστικός φάκελος PDF, ποτέ το
+  root της εφαρμογής** (ούτε το `<CHANGEME_APP_DIR>` ούτε φάκελος που περιέχει
+  `.env`, βάση ή κώδικα). Το endpoint σερβίρει μόνο αρχεία `.pdf` μέσα σε
+  αυτόν τον φάκελο, αλλά ο φάκελος ορίζει το όριο.
+- Τα σχετικά paths του πίνακα `documents` επιλύονται ως προς το `DOCS_ROOT`.
+  Η βάση που παραδίδεται κρατά τα paths όπως ήταν στη μηχανή ανάπτυξης, άρα
+  κάτω από το `DOCS_ROOT` χρειάζεται η ίδια δομή φακέλων.
+- Κάθε αρχείο σερβίρεται μόνο αν το sha256 του αντιστοιχεί στο `doc_id`.
+- Όταν ένα PDF δεν σερβίρεται, ο χρήστης βλέπει πάντα το ίδιο 404. Για τις
+  περιπτώσεις που δείχνουν αλλοίωση ή λάθος ρύθμιση, το log γράφει
+  «Άρνηση σερβιρίσματος εγγράφου (<κωδικός>)», μόνο με τον κωδικό, και
+  πρέπει να ελέγχονται:
+  - `hash_mismatch`: το PDF αντικαταστάθηκε ή αλλοιώθηκε μετά το ingestion.
+  - `outside_root`: το path της βάσης βγαίνει έξω από το `DOCS_ROOT`.
+  - `file_missing`: το αρχείο δεν υπάρχει στο `DOCS_ROOT` (λάθος δομή φακέλων
+    ή αρχείο που λείπει).
+  - `unreadable`: το αρχείο υπάρχει, αλλά η υπηρεσία δεν μπορεί να το
+    διαβάσει (δικαιώματα).
+
+  Ένα αίτημα για έγγραφο που δεν αντιστοιχεί στο άτομο ή στην περίοδο
+  (`not_found`) δεν γράφει log. Όλοι οι κωδικοί, και το `not_found`,
+  καταγράφονται στο `audit_log.refusal_reason`.
+- Όριο μεγέθους ανά αρχείο: `MAX_DOC_BYTES`, default 50 MB.
+- Τα PDF περιέχουν προσωπικά δεδομένα: τα ίδια δικαιώματα με τον φάκελο της
+  βάσης (βήμα 5). Ο λογαριασμός της υπηρεσίας χρειάζεται μόνο ανάγνωση.
+
+```sh
+chown -R <CHANGEME_SERVICE_USER>: <CHANGEME_DOCS_ROOT>
+chmod -R u=rX,go= <CHANGEME_DOCS_ROOT>
+```
+
+```bat
+icacls <CHANGEME_DOCS_ROOT> /inheritance:r /grant:r "<CHANGEME_SERVICE_USER>:(OI)(CI)RX"
+```
 
 ## 6. Migration, ΠΡΙΝ από το API
 
