@@ -410,20 +410,154 @@ def test_admin_reset_password_kills_sessions_and_unlocks():
         assert admin.post("/api/admin/users/99/reset-password").status_code == 404
 
 
+def _denied_rows(db_path: Path) -> list[tuple]:
+    conn = sqlite3.connect(db_path)
+    try:
+        return conn.execute(
+            "SELECT username, actor_user_id, target_user_id, detail FROM auth_log"
+            " WHERE event = 'admin_action_denied' ORDER BY id"
+        ).fetchall()
+    finally:
+        conn.close()
+
+
 def test_last_active_admin_cannot_be_disabled():
+    # Κάθε admin στόχος απορρίπτεται με 403, είτε είναι ο τελευταίος ενεργός
+    # είτε όχι. Ο φραγμός τελευταίου admin μένει στο SQL ως backstop.
     with _env() as (db_path, _):
         make_user(db_path, "root", role="admin")
         admin = new_client(app)
         login(admin, "root")
-        assert admin.post("/api/admin/users/1/disable").status_code == 409
+        assert admin.post("/api/admin/users/1/disable").status_code == 403
         assert _user_row(db_path, "root")["is_active"] == 1
         assert admin.get(ME).status_code == 200
 
         make_user(db_path, "second", role="admin")
-        assert admin.post("/api/admin/users/2/disable").status_code == 204
-        # Ο second είναι πλέον ανενεργός, άρα ο root είναι ξανά ο τελευταίος.
-        assert admin.post("/api/admin/users/1/disable").status_code == 409
+        assert admin.post("/api/admin/users/2/disable").status_code == 403
+        assert admin.post("/api/admin/users/1/disable").status_code == 403
+        assert _user_row(db_path, "root")["is_active"] == 1
+        assert _user_row(db_path, "second")["is_active"] == 1
         assert admin.post("/api/admin/users/99/disable").status_code == 404
+
+
+# --- προστασία λογαριασμών admin από το API -------------------------------------
+
+
+def test_api_create_admin_is_403_and_creates_nothing():
+    with _env() as (db_path, _):
+        make_user(db_path, "root", role="admin")
+        admin = new_client(app)
+        login(admin, "root")
+        response = admin.post("/api/admin/users", json={"username": "Mallory", "role": "admin"})
+        assert response.status_code == 403
+        assert "temp_password" not in response.text
+        assert _user_row(db_path, "mallory") is None
+        assert _denied_rows(db_path) == [("mallory", 1, None, "create_admin")]
+
+
+def test_api_create_user_is_201():
+    with _env() as (db_path, _):
+        make_user(db_path, "root", role="admin")
+        admin = new_client(app)
+        login(admin, "root")
+        response = admin.post("/api/admin/users", json={"username": "carol", "role": "user"})
+        assert response.status_code == 201
+        assert _user_row(db_path, "carol")["role"] == "user"
+        assert _denied_rows(db_path) == []
+
+
+def test_disable_admin_with_two_active_admins_is_403():
+    with _env() as (db_path, _):
+        make_user(db_path, "root", role="admin")
+        make_user(db_path, "second", role="admin")
+        admin = new_client(app)
+        login(admin, "root")
+        other = new_client(app)
+        login(other, "second")
+
+        assert admin.post("/api/admin/users/2/disable").status_code == 403
+        assert _user_row(db_path, "root")["is_active"] == 1
+        assert _user_row(db_path, "second")["is_active"] == 1
+        # Τα sessions του στόχου δεν αγγίζονται.
+        assert other.get(ME).status_code == 200
+        assert "admin_disable_user" not in _auth_events(db_path)
+        assert _denied_rows(db_path) == [("second", 1, 2, "disable_admin")]
+
+
+def test_disable_user_is_204():
+    with _env() as (db_path, _):
+        make_user(db_path, "root", role="admin")
+        make_user(db_path, "alice")
+        admin = new_client(app)
+        login(admin, "root")
+        assert admin.post("/api/admin/users/2/disable").status_code == 204
+        assert _user_row(db_path, "alice")["is_active"] == 0
+        assert _denied_rows(db_path) == []
+
+
+def test_reset_password_on_admin_is_403_and_hash_unchanged():
+    with _env() as (db_path, _):
+        make_user(db_path, "root", role="admin")
+        make_user(db_path, "second", role="admin")
+        before = dict(_user_row(db_path, "second"))
+        other = new_client(app)
+        login(other, "second")
+        admin = new_client(app)
+        login(admin, "root")
+
+        response = admin.post("/api/admin/users/2/reset-password")
+        assert response.status_code == 403
+        assert "temp_password" not in response.text
+        after = dict(_user_row(db_path, "second"))
+        assert after["password_hash"] == before["password_hash"]
+        assert after["must_change_pw"] == before["must_change_pw"]
+        assert other.get(ME).status_code == 200
+        assert "admin_reset_password" not in _auth_events(db_path)
+        assert _denied_rows(db_path) == [("second", 1, 2, "reset_admin")]
+
+
+def test_reset_password_on_user_succeeds():
+    with _env() as (db_path, _):
+        make_user(db_path, "root", role="admin")
+        make_user(db_path, "alice")
+        before = _user_row(db_path, "alice")["password_hash"]
+        admin = new_client(app)
+        login(admin, "root")
+        response = admin.post("/api/admin/users/2/reset-password")
+        assert response.status_code == 200
+        assert _user_row(db_path, "alice")["password_hash"] != before
+        assert _denied_rows(db_path) == []
+
+
+def test_unknown_id_stays_404_on_disable_and_reset():
+    # Το rowcount == 0 δεν πρέπει να μετατρέπει το "δεν υπάρχει" σε 403.
+    with _env() as (db_path, _):
+        make_user(db_path, "root", role="admin")
+        admin = new_client(app)
+        login(admin, "root")
+        assert admin.post("/api/admin/users/99/disable").status_code == 404
+        assert admin.post("/api/admin/users/99/reset-password").status_code == 404
+        assert _denied_rows(db_path) == []
+
+
+def test_denied_log_never_contains_passwords():
+    with _env() as (db_path, _):
+        make_user(db_path, "root", role="admin")
+        make_user(db_path, "second", role="admin")
+        admin = new_client(app)
+        login(admin, "root")
+        admin.post("/api/admin/users", json={"username": "mallory", "role": "admin"})
+        admin.post("/api/admin/users/2/disable")
+        admin.post("/api/admin/users/2/reset-password")
+        conn = sqlite3.connect(db_path)
+        try:
+            rows = conn.execute(
+                "SELECT * FROM auth_log WHERE event = 'admin_action_denied'"
+            ).fetchall()
+        finally:
+            conn.close()
+        assert len(rows) == 3
+        assert not any(TEST_PASSWORD in str(v) for row in rows for v in row)
 
 
 # --- τι μένει στη βάση -------------------------------------------------------------
@@ -493,6 +627,14 @@ def run_all():
         test_admin_creates_user_with_temp_password_and_must_change,
         test_admin_reset_password_kills_sessions_and_unlocks,
         test_last_active_admin_cannot_be_disabled,
+        test_api_create_admin_is_403_and_creates_nothing,
+        test_api_create_user_is_201,
+        test_disable_admin_with_two_active_admins_is_403,
+        test_disable_user_is_204,
+        test_reset_password_on_admin_is_403_and_hash_unchanged,
+        test_reset_password_on_user_succeeds,
+        test_unknown_id_stays_404_on_disable_and_reset,
+        test_denied_log_never_contains_passwords,
         test_db_contains_no_raw_token_and_no_password,
     ]
     for test in tests:

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { ApiError, type ApiClient } from '../api/client'
-import type { UserOut, UserRole } from '../api/types'
+import type { UserOut } from '../api/types'
 import {
   CARD_STYLE,
   ERROR_STYLE,
@@ -32,7 +32,6 @@ function statusText(u: UserOut): string {
 export function UserAdminPanel({ api }: { api: UserAdminApi }) {
   const [users, setUsers] = useState<UserOut[]>([])
   const [username, setUsername] = useState('')
-  const [role, setRole] = useState<UserRole>('user')
   const [error, setError] = useState<string | null>(null)
   // Ο προσωρινός κωδικός ζει μόνο σε αυτό το state: εμφανίζεται μία φορά και
   // χάνεται με την επόμενη ενέργεια ή την έξοδο από τη σελίδα.
@@ -55,7 +54,8 @@ export function UserAdminPanel({ api }: { api: UserAdminApi }) {
     setError(null)
     setTemp(null)
     try {
-      const created = await api.createUser(username, role)
+      // Το API δημιουργεί μόνο role='user'. Admins μόνο από το CLI (create_admin).
+      const created = await api.createUser(username, 'user')
       setTemp({ username: created.username, password: created.temp_password })
       setUsername('')
       reload()
@@ -105,19 +105,6 @@ export function UserAdminPanel({ api }: { api: UserAdminApi }) {
             required
           />
         </label>
-        <label className="flex flex-col gap-1.5">
-          <span className={LABEL_CLASS}>Ρόλος</span>
-          <select
-            aria-label="Ρόλος"
-            value={role}
-            onChange={(e) => setRole(e.target.value as UserRole)}
-            className={INPUT_CLASS}
-            style={INPUT_STYLE}
-          >
-            <option value="user">user</option>
-            <option value="admin">admin</option>
-          </select>
-        </label>
         <button type="submit" className={SECONDARY_BUTTON_CLASS} style={SECONDARY_BUTTON_STYLE}>
           Δημιουργία
         </button>
@@ -161,39 +148,42 @@ export function UserAdminPanel({ api }: { api: UserAdminApi }) {
               <td className="py-2">{u.role}</td>
               <td className="py-2">{statusText(u)}</td>
               <td className="py-2">
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleReset(u)}
-                    className={SECONDARY_BUTTON_CLASS}
-                    style={SECONDARY_BUTTON_STYLE}
-                    aria-label={`Νέος προσωρινός κωδικός για ${u.username}`}
-                  >
-                    Νέος κωδικός
-                  </button>
-                  {u.is_active &&
-                    (confirmDisable === u.id ? (
-                      <button
-                        type="button"
-                        onClick={() => handleDisable(u)}
-                        className={SECONDARY_BUTTON_CLASS}
-                        style={{ ...SECONDARY_BUTTON_STYLE, color: '#f87171' }}
-                        aria-label={`Επιβεβαίωση απενεργοποίησης ${u.username}`}
-                      >
-                        Επιβεβαίωση;
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setConfirmDisable(u.id)}
-                        className={SECONDARY_BUTTON_CLASS}
-                        style={SECONDARY_BUTTON_STYLE}
-                        aria-label={`Απενεργοποίηση ${u.username}`}
-                      >
-                        Απενεργοποίηση
-                      </button>
-                    ))}
-                </div>
+                {/* Ο server απορρίπτει κάθε ενέργεια σε admin. Το UI απλώς δεν την προσφέρει. */}
+                {u.role === 'user' && (
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleReset(u)}
+                      className={SECONDARY_BUTTON_CLASS}
+                      style={SECONDARY_BUTTON_STYLE}
+                      aria-label={`Νέος προσωρινός κωδικός για ${u.username}`}
+                    >
+                      Νέος κωδικός
+                    </button>
+                    {u.is_active &&
+                      (confirmDisable === u.id ? (
+                        <button
+                          type="button"
+                          onClick={() => handleDisable(u)}
+                          className={SECONDARY_BUTTON_CLASS}
+                          style={{ ...SECONDARY_BUTTON_STYLE, color: '#f87171' }}
+                          aria-label={`Επιβεβαίωση απενεργοποίησης ${u.username}`}
+                        >
+                          Επιβεβαίωση;
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDisable(u.id)}
+                          className={SECONDARY_BUTTON_CLASS}
+                          style={SECONDARY_BUTTON_STYLE}
+                          aria-label={`Απενεργοποίηση ${u.username}`}
+                        >
+                          Απενεργοποίηση
+                        </button>
+                      ))}
+                  </div>
+                )}
               </td>
             </tr>
           ))}
