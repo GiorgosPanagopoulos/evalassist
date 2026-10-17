@@ -1,41 +1,61 @@
 @import "tailwindcss";
 
 @theme {
-  --color-deck-bg: #0a0a0c;
-  --color-deck-panel: #0e0e11;
-  --color-deck-surface: #131318;
-  --color-deck-surface-2: #131316;
-  --color-deck-border: #232328;
-  --color-deck-divider: #1d1d22;
-  --color-deck-control-border: #26262d;
-  --color-deck-text: #f2f2f4;
-  --color-deck-muted: #8b8b95;
-  --color-deck-faint: #6d6d78;
-  --color-deck-ghost: #4a4a55;
-  --color-deck-accent: #4de3ff;
-  --color-deck-violet: #7c5cff;
-  --color-deck-green: #3fdd78;
-  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --color-bg: #0b1220;
+  --color-rail: #0a101c;
+  --color-toolbar: #0e1729;
+  --color-card: #0f1a2f;
+  --color-input: #111c33;
+  --color-line: #1e2a44;
+  --color-line-strong: #2a3756;
+  --color-navy: #1b2a4a;
+  --color-ink: #e6eaf2;
+  --color-muted: #a9b4c8;
+  /* subtle: small text (AA on card). subtle-deco: decorative only. */
+  --color-subtle: #7884a0;
+  --color-subtle-deco: #6f7c96;
+  --color-gold: #d4a93a;
+  --color-gold-hover: #e8c25a;
+  --color-danger-soft: #f2a48f;
+  --color-ok: #3fb68b;
+  --color-ok-text: #6fd3ae;
+  --font-sans: "Fira Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
 body {
   margin: 0;
-  background-color: #0a0a0c;
-  color: #f2f2f4;
+  background-color: var(--color-bg);
+  color: var(--color-ink);
   font-family: var(--font-sans);
 }
 
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: #4de3ff;
-  box-shadow: 0 0 0 1px rgba(77, 227, 255, 0.25);
+  border-color: var(--color-gold);
+  box-shadow: 0 0 0 1px rgba(212, 169, 58, 0.3);
   outline: none;
 }
 
-button:hover:not(:disabled),
-[role="group"] button:hover:not(:disabled) {
-  filter: brightness(1.08);
-  transition: filter 120ms ease;
+:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+  }
 }

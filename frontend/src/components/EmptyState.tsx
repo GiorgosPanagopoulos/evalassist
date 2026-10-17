@@ -6,7 +6,7 @@ export function EmptyState({ message = 'Δεν βρέθηκαν δεδομένα
   return (
     <div
       className="rounded border border-dashed px-3 py-6 text-center text-sm"
-      style={{ borderColor: '#26262d', color: '#6d6d78' }}
+      style={{ borderColor: '#2a3756', color: '#7884a0' }}
     >
       {message}
     </div>

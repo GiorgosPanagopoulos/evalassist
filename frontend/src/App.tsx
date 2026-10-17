@@ -8,49 +8,13 @@ import { TimelinePanel } from './components/TimelinePanel'
 import { LoginPage } from './components/LoginPage'
 import { ChangePasswordPage } from './components/ChangePasswordPage'
 import { UserAdminPanel } from './components/UserAdminPanel'
-import { SECONDARY_BUTTON_CLASS, SECONDARY_BUTTON_STYLE } from './components/authStyles'
+import { IconRail, type View } from './components/IconRail'
+import type { QueryMode } from './components/ModeBadge'
+import { uiFlags } from './lib/flags'
 
 const defaultApi = new ApiClient()
 
-// Τα logo είναι στο public/: σχετικά ως προς το base του build ('./'), ώστε
-// να δουλεύουν και κάτω από subpath (π.χ. /evalassist/).
-const ASSET_BASE = import.meta.env.BASE_URL
-
 type AuthState = { status: 'loading' } | { status: 'anonymous' } | { status: 'authenticated'; me: Me }
-
-type View = 'queries' | 'users' | 'password'
-
-function MainEmptyState() {
-  return (
-    <div className="flex h-full flex-1 flex-col items-center justify-center gap-3.5 text-center">
-      <p className="text-[13px]" style={{ color: '#6d6d78' }}>
-        Υποβάλετε ένα ερώτημα για να δείτε αποτελέσματα
-      </p>
-    </div>
-  )
-}
-
-function Brand() {
-  return (
-    <div className="mb-5 flex items-center gap-2.5">
-      <img
-        src={`${ASSET_BASE}logo.png`}
-        alt="EvalAssist"
-        className="h-7 w-7 rounded-full object-cover"
-        style={{ backgroundColor: '#f7f4ec', boxShadow: '0 0 0 1px #26262d' }}
-      />
-      <span className="text-[15px] font-bold" style={{ color: '#f2f2f4' }}>
-        EvalAssist
-      </span>
-      <span
-        className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[.5px]"
-        style={{ backgroundColor: '#e8c34a', color: '#0a0a0c' }}
-      >
-        Beta
-      </span>
-    </div>
-  )
-}
 
 interface WorkspaceProps {
   api: ApiClient
@@ -60,12 +24,14 @@ interface WorkspaceProps {
 }
 
 function Workspace({ api, me, onLogout, onPasswordChanged }: WorkspaceProps) {
+  const flags = uiFlags(me.features)
   const [result, setResult] = useState<StructuredResult | SemanticResult | null>(null)
   const [auditId, setAuditId] = useState<number | null>(null)
-  const [modeLabel, setModeLabel] = useState('βαθμολογίες')
+  const [mode, setMode] = useState<QueryMode>('structured')
   const [view, setView] = useState<View>('queries')
-  // Μία πηγή αλήθειας για το άτομο: το «Άτομο» του αριστερού πάνελ. Το ref
-  // κρατά το τρέχον person_id για σύγκριση με απαντήσεις που φτάνουν αργά.
+  const [timelineKey, setTimelineKey] = useState(0)
+  // Μία πηγή αλήθειας για το άτομο: η αναζήτηση του toolbar. Το ref κρατά
+  // το τρέχον person_id για σύγκριση με απαντήσεις που φτάνουν αργά.
   const [selectedPerson, setSelectedPerson] = useState<PersonOut | null>(null)
   const selectedPersonIdRef = useRef('')
 
@@ -86,83 +52,42 @@ function Workspace({ api, me, onLogout, onPasswordChanged }: WorkspaceProps) {
     setView('queries')
   }
 
+  function handleTimelineRequest() {
+    setResult(null)
+    setAuditId(null)
+    setView('queries')
+    setTimelineKey((k) => k + 1)
+  }
+
   function handleError(error: ApiError) {
     setResult(null)
     setAuditId(null)
     console.error(error)
   }
 
-  const crumb = view === 'users' ? 'χρήστες' : view === 'password' ? 'αλλαγή κωδικού' : modeLabel
-
   return (
-    <div className="grid min-h-screen" style={{ gridTemplateColumns: 'minmax(220px, 300px) minmax(0, 1fr)', backgroundColor: '#0a0a0c' }}>
-      <aside
-        className="flex h-full flex-col"
-        style={{ backgroundColor: '#0e0e11', borderRight: '1px solid #1d1d22', padding: '22px 20px' }}
-      >
-        <Brand />
+    <div className="flex min-h-screen flex-col bg-bg md:flex-row">
+      <IconRail me={me} view={view} flags={flags} onNavigate={setView} onLogout={onLogout} />
 
-        <QueryForm
-          api={api}
-          personId={selectedPerson?.person_id ?? ''}
-          onPersonChange={handlePersonChange}
-          onResult={handleResult}
-          onError={handleError}
-          onModeLabelChange={setModeLabel}
-          // Χωρίς features από τον server η επιλογή μένει κλειστή.
-          semanticEnabled={me.features?.semantic_enabled === true}
-        />
-      </aside>
-
-      <div
-        className="relative flex min-w-0 flex-col overflow-hidden"
-        style={{ background: 'radial-gradient(ellipse at 50% 40%, #131316 0%, #0a0a0c 70%)' }}
-      >
-        <img
-          src={`${ASSET_BASE}logo-watermark.png`}
-          alt=""
-          aria-hidden="true"
-          className="pointer-events-none select-none absolute top-1/2 left-1/2 z-0 -translate-x-1/2 -translate-y-1/2"
-          style={{ width: 360, opacity: 0.18, filter: 'grayscale(0.4)' }}
-        />
-
-        <header
-          className="relative z-10 flex items-center justify-between gap-4"
-          style={{ padding: '16px 24px', borderBottom: '1px solid #1d1d22' }}
-        >
-          <div className="font-mono text-[12px]">
-            <span style={{ color: '#8b8b95' }}>{view === 'queries' ? 'queries / ' : 'λογαριασμός / '}</span>
-            <span style={{ color: '#f2f2f4' }}>{crumb}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <HealthIndicator api={api} semanticEnabled={me.features?.semantic_enabled === true} />
-            <span className="font-mono text-[11.5px]" style={{ color: '#c9c9d1' }} aria-label="Συνδεδεμένος χρήστης">
-              {me.username}
-            </span>
-            {view !== 'queries' && (
-              <button type="button" onClick={() => setView('queries')} className={SECONDARY_BUTTON_CLASS} style={SECONDARY_BUTTON_STYLE}>
-                Ερωτήματα
-              </button>
-            )}
-            {me.role === 'admin' && view !== 'users' && (
-              <button type="button" onClick={() => setView('users')} className={SECONDARY_BUTTON_CLASS} style={SECONDARY_BUTTON_STYLE}>
-                Χρήστες
-              </button>
-            )}
-            {view !== 'password' && (
-              <button type="button" onClick={() => setView('password')} className={SECONDARY_BUTTON_CLASS} style={SECONDARY_BUTTON_STYLE}>
-                Κωδικός
-              </button>
-            )}
-            <button type="button" onClick={onLogout} className={SECONDARY_BUTTON_CLASS} style={SECONDARY_BUTTON_STYLE}>
-              Αποσύνδεση
-            </button>
-          </div>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="no-print border-b border-line bg-toolbar px-4 py-3 sm:px-6 lg:px-8">
+          <QueryForm
+            api={api}
+            personId={selectedPerson?.person_id ?? ''}
+            onPersonChange={handlePersonChange}
+            onResult={handleResult}
+            onError={handleError}
+            onModeChange={setMode}
+            onTimelineRequest={handleTimelineRequest}
+            // Χωρίς features από τον server η επιλογή μένει κλειστή.
+            semanticEnabled={flags.semantic}
+            trailing={<HealthIndicator api={api} semanticEnabled={flags.semantic} />}
+          />
         </header>
 
-        <div className="relative z-10 flex flex-1 flex-col overflow-y-auto">
+        <main className="flex flex-1 flex-col">
           {view === 'users' && me.role === 'admin' ? (
-            <div className="mx-auto w-full max-w-[1100px]" style={{ padding: '24px' }}>
+            <div className="mx-auto w-full max-w-[1100px] p-4 sm:p-6">
               <UserAdminPanel api={api} />
             </div>
           ) : view === 'password' ? (
@@ -176,18 +101,20 @@ function Workspace({ api, me, onLogout, onPasswordChanged }: WorkspaceProps) {
               onCancel={() => setView('queries')}
             />
           ) : (
-            <>
-              <div className="mx-auto w-full max-w-[1100px]" style={{ padding: '24px 24px 0' }}>
-                <TimelinePanel api={api} person={selectedPerson} />
-              </div>
-              {result === null || selectedPerson === null ? <MainEmptyState /> : (
-                <div className="mx-auto w-full max-w-[1100px]" style={{ padding: '24px' }}>
-                  <ResultsPanel result={result} auditId={auditId} person={selectedPerson} />
-                </div>
+            <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+              <TimelinePanel
+                api={api}
+                person={selectedPerson}
+                mode={mode}
+                flags={flags}
+                reloadKey={timelineKey}
+              />
+              {result !== null && selectedPerson !== null && (
+                <ResultsPanel result={result} auditId={auditId} person={selectedPerson} />
               )}
-            </>
+            </div>
           )}
-        </div>
+        </main>
       </div>
     </div>
   )
@@ -220,7 +147,7 @@ function App({ api = defaultApi }: { api?: ApiClient }) {
   }, [])
 
   if (auth.status === 'loading') {
-    return <div className="min-h-screen" style={{ backgroundColor: '#0a0a0c' }} aria-busy="true" />
+    return <div className="min-h-screen bg-bg" aria-busy="true" />
   }
 
   if (auth.status === 'anonymous') {
@@ -229,7 +156,7 @@ function App({ api = defaultApi }: { api?: ApiClient }) {
 
   if (auth.me.must_change_pw) {
     return (
-      <div className="flex min-h-screen flex-col" style={{ backgroundColor: '#0a0a0c' }}>
+      <div className="flex min-h-screen flex-col bg-bg">
         <ChangePasswordPage api={api} forced onChanged={markPasswordChanged} onLogout={handleLogout} />
       </div>
     )

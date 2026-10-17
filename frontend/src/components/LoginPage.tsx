@@ -40,7 +40,15 @@ export function LoginPage({ api, onLoggedIn }: LoginPageProps) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: '#0a0a0c', padding: 16 }}>
+    <div className="flex min-h-screen flex-col items-center justify-center" style={{ backgroundColor: '#0b1220', padding: 16 }}>
+      <img
+        src={`${import.meta.env.BASE_URL}logo.png`}
+        alt="EvalAssist"
+        width={96}
+        height={96}
+        className="mb-6 h-24 w-24 rounded-full border-[1.5px] border-[#d4a93a] object-cover"
+        style={{ backgroundColor: '#f7f4ec' }}
+      />
       <form
         onSubmit={handleSubmit}
         className="flex w-full max-w-[360px] flex-col gap-3.5 rounded-xl border"
@@ -48,13 +56,7 @@ export function LoginPage({ api, onLoggedIn }: LoginPageProps) {
         aria-label="Σύνδεση"
       >
         <div className="mb-1 flex items-center gap-2.5">
-          <img
-            src={`${import.meta.env.BASE_URL}logo.png`}
-            alt="EvalAssist"
-            className="h-7 w-7 rounded-full object-cover"
-            style={{ backgroundColor: '#f7f4ec' }}
-          />
-          <h1 className="text-[15px] font-bold" style={{ color: '#f2f2f4' }}>
+          <h1 className="text-[15px] font-bold" style={{ color: '#e6eaf2' }}>
             EvalAssist
           </h1>
         </div>

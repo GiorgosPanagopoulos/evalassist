@@ -7,7 +7,7 @@ export type HealthIndicatorApi = Pick<ApiClient, 'getHealth'>
 
 type HealthState = 'checking' | 'ok' | 'ollama_down' | 'system_down'
 
-const GREEN_DOT = { backgroundColor: '#3fdd78', boxShadow: '0 0 8px rgba(63,221,120,.6)' }
+const GREEN_DOT = { backgroundColor: '#3fb68b', boxShadow: '0 0 8px rgba(63,182,139,.5)' }
 const AMBER_DOT = { backgroundColor: '#f59e0b' }
 
 // semanticEnabled έρχεται από το features.semantic_enabled του /api/auth/me,
@@ -43,7 +43,7 @@ export function HealthIndicator({
 
   if (state === 'checking') {
     return (
-      <span className="inline-flex items-center gap-2 text-[11.5px]" style={{ color: '#8b8b95' }}>
+      <span className="inline-flex items-center gap-2 text-[11.5px]" style={{ color: '#a9b4c8' }}>
         <span className="h-1.75 w-1.75 rounded-full bg-gray-400" aria-hidden />
         Έλεγχος κατάστασης...
       </span>
@@ -60,7 +60,7 @@ export function HealthIndicator({
         aria-hidden
       />
       {ok ? (
-        <span style={{ color: '#8b8b95' }}>Σύστημα ενεργό</span>
+        <span style={{ color: '#a9b4c8' }}>Σύστημα ενεργό</span>
       ) : (
         <span style={{ color: '#f59e0b' }}>
           {state === 'ollama_down' ? 'Ollama μη διαθέσιμο' : 'Σύστημα μη διαθέσιμο'}

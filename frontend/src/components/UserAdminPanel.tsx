@@ -114,13 +114,13 @@ export function UserAdminPanel({ api }: { api: UserAdminApi }) {
         <div
           role="status"
           className="rounded-lg border px-3 py-2 text-[12.5px]"
-          style={{ borderColor: '#e8c34a', color: '#f2f2f4' }}
+          style={{ borderColor: '#d4a93a', color: '#e6eaf2' }}
         >
           Προσωρινός κωδικός για <strong>{temp.username}</strong>:{' '}
-          <code className="font-mono" style={{ color: '#e8c34a' }}>
+          <code className="font-mono" style={{ color: '#d4a93a' }}>
             {temp.password}
           </code>
-          <div className="mt-1 text-[11.5px]" style={{ color: '#8b8b95' }}>
+          <div className="mt-1 text-[11.5px]" style={{ color: '#a9b4c8' }}>
             Εμφανίζεται μόνο μία φορά. Δώστε τον στον χρήστη, που θα πρέπει να τον αλλάξει στην πρώτη σύνδεση.
           </div>
         </div>
@@ -132,7 +132,7 @@ export function UserAdminPanel({ api }: { api: UserAdminApi }) {
         </p>
       )}
 
-      <table className="w-full text-left text-[12.5px]" style={{ color: '#e8e8ec' }}>
+      <table className="w-full text-left text-[12.5px]" style={{ color: '#e6eaf2' }}>
         <thead>
           <tr className={LABEL_CLASS}>
             <th className="py-1.5">Χρήστης</th>
@@ -143,7 +143,7 @@ export function UserAdminPanel({ api }: { api: UserAdminApi }) {
         </thead>
         <tbody>
           {users.map((u) => (
-            <tr key={u.id} style={{ borderTop: '1px solid #1d1d22' }}>
+            <tr key={u.id} style={{ borderTop: '1px solid #1e2a44' }}>
               <td className="py-2 font-mono">{u.username}</td>
               <td className="py-2">{u.role}</td>
               <td className="py-2">{statusText(u)}</td>
@@ -166,7 +166,7 @@ export function UserAdminPanel({ api }: { api: UserAdminApi }) {
                           type="button"
                           onClick={() => handleDisable(u)}
                           className={SECONDARY_BUTTON_CLASS}
-                          style={{ ...SECONDARY_BUTTON_STYLE, color: '#f87171' }}
+                          style={{ ...SECONDARY_BUTTON_STYLE, color: '#f2a48f' }}
                           aria-label={`Επιβεβαίωση απενεργοποίησης ${u.username}`}
                         >
                           Επιβεβαίωση;

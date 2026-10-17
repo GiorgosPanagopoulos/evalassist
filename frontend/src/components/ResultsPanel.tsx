@@ -68,13 +68,13 @@ function SectionsTable({ sections, title }: { sections: Section[]; title?: strin
   return (
     <div className="flex flex-col gap-1">
       {title && (
-        <h3 className="text-sm font-semibold" style={{ color: '#f2f2f4' }}>
+        <h3 className="text-sm font-semibold" style={{ color: '#e6eaf2' }}>
           {title}
         </h3>
       )}
       <ScrollTable>
         <thead>
-          <tr className="border-b text-left" style={{ borderColor: '#26262d' }}>
+          <tr className="border-b text-left" style={{ borderColor: '#2a3756' }}>
             <th className="py-1">Ενότητα</th>
             <th className="py-1">Βαθμολογία</th>
             <th className="py-1">Σχόλιο</th>
@@ -82,7 +82,7 @@ function SectionsTable({ sections, title }: { sections: Section[]; title?: strin
         </thead>
         <tbody>
           {sections.map((s, idx) => (
-            <tr key={`${s.section}-${idx}`} className="border-b" style={{ borderColor: '#1d1d22' }}>
+            <tr key={`${s.section}-${idx}`} className="border-b" style={{ borderColor: '#1e2a44' }}>
               <td className="py-1">{s.section}</td>
               <td className="py-1 font-mono">{s.score}</td>
               <td className="py-1">{s.comment}</td>
@@ -97,19 +97,19 @@ function SectionsTable({ sections, title }: { sections: Section[]; title?: strin
 function TopBottomTable({ items, title }: { items: TopBottomItem[]; title: string }) {
   return (
     <div className="flex flex-col gap-1">
-      <h3 className="text-sm font-semibold" style={{ color: '#f2f2f4' }}>
+      <h3 className="text-sm font-semibold" style={{ color: '#e6eaf2' }}>
         {title}
       </h3>
       <ScrollTable>
         <thead>
-          <tr className="border-b text-left" style={{ borderColor: '#26262d' }}>
+          <tr className="border-b text-left" style={{ borderColor: '#2a3756' }}>
             <th className="py-1 pr-2">Ενότητα</th>
             <th className="py-1 w-24">Βαθμολογία</th>
           </tr>
         </thead>
         <tbody>
           {items.map((it, idx) => (
-            <tr key={`${it.label}-${idx}`} className="border-b" style={{ borderColor: '#1d1d22' }}>
+            <tr key={`${it.label}-${idx}`} className="border-b" style={{ borderColor: '#1e2a44' }}>
               <td className="py-1 pr-2">{it.label}</td>
               <td className="py-1 font-mono">{it.value}</td>
             </tr>
@@ -134,16 +134,16 @@ function OverallField({ overall }: { overall: OverallFieldScore }) {
   return (
     <div
       className="flex flex-col gap-1 rounded border p-3"
-      style={{ borderColor: '#26262d' }}
+      style={{ borderColor: '#2a3756' }}
     >
-      <h3 className="text-sm font-semibold" style={{ color: '#f2f2f4' }}>
+      <h3 className="text-sm font-semibold" style={{ color: '#e6eaf2' }}>
         Συνολική κρίση (εκτός κατάταξης)
       </h3>
       <div className="flex items-baseline justify-between gap-2 text-sm">
         <span>{overall.description || overall.field_code}</span>
         <span className="font-mono">{overall.value}</span>
       </div>
-      <p className="text-xs" style={{ color: '#8b8b95' }}>
+      <p className="text-xs" style={{ color: '#a9b4c8' }}>
         Ολιστική κρίση του αξιολογητή - δεν είναι συγκρίσιμη με τα επιμέρους πεδία.
       </p>
     </div>
@@ -154,7 +154,7 @@ function FieldScoresTable({ scores }: { scores: FieldScore[] }) {
   return (
     <ScrollTable>
       <thead>
-        <tr className="border-b text-left" style={{ borderColor: '#26262d' }}>
+        <tr className="border-b text-left" style={{ borderColor: '#2a3756' }}>
           <th className="py-1 pr-2 w-16">Κωδικός</th>
           <th className="py-1 pr-2">Περιγραφή</th>
           <th className="py-1 w-20">Τιμή</th>
@@ -162,7 +162,7 @@ function FieldScoresTable({ scores }: { scores: FieldScore[] }) {
       </thead>
       <tbody>
         {scores.map((s, idx) => (
-          <tr key={`${s.field_code}-${idx}`} className="border-b" style={{ borderColor: '#1d1d22' }}>
+          <tr key={`${s.field_code}-${idx}`} className="border-b" style={{ borderColor: '#1e2a44' }}>
             <td className="py-1 pr-2 font-mono">{s.field_code}</td>
             <td className="py-1 pr-2">{s.description}</td>
             <td className="py-1 font-mono">{String(s.value)}</td>
@@ -178,39 +178,39 @@ function EntryDetails({ entry, title }: { entry: EvaluationEntry; title?: string
   return (
     <div className="flex flex-col gap-3">
       {title && (
-        <h3 className="text-sm font-semibold" style={{ color: '#f2f2f4' }}>
+        <h3 className="text-sm font-semibold" style={{ color: '#e6eaf2' }}>
           {title}
         </h3>
       )}
 
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm" style={{ color: '#c8c8d0' }}>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm" style={{ color: '#c4ccdb' }}>
         {entry.ea_type && (
           <>
-            <span style={{ color: '#8b8b95' }}>Τύπος έκθεσης</span>
+            <span style={{ color: '#a9b4c8' }}>Τύπος έκθεσης</span>
             <span>{entry.ea_type}</span>
           </>
         )}
         {entry.characterization && (
           <>
-            <span style={{ color: '#8b8b95' }}>Χαρακτηρισμός</span>
+            <span style={{ color: '#a9b4c8' }}>Χαρακτηρισμός</span>
             <span>{entry.characterization}</span>
           </>
         )}
         {entry.score !== undefined && entry.score !== null && (
           <>
-            <span style={{ color: '#8b8b95' }}>Συνολική βαθμολογία</span>
+            <span style={{ color: '#a9b4c8' }}>Συνολική βαθμολογία</span>
             <span className="font-mono">{entry.score}</span>
           </>
         )}
         {entry.unit && (
           <>
-            <span style={{ color: '#8b8b95' }}>Μονάδα</span>
+            <span style={{ color: '#a9b4c8' }}>Μονάδα</span>
             <span>{entry.unit}</span>
           </>
         )}
         {evaluator && (evaluator.rank || evaluator.name || evaluator.role) && (
           <>
-            <span style={{ color: '#8b8b95' }}>Αξιολογητής</span>
+            <span style={{ color: '#a9b4c8' }}>Αξιολογητής</span>
             <span>
               {[evaluator.rank, evaluator.name, evaluator.role].filter(Boolean).join(' - ')}
             </span>
@@ -220,7 +220,7 @@ function EntryDetails({ entry, title }: { entry: EvaluationEntry; title?: string
 
       {Array.isArray(entry.field_scores) && entry.field_scores.length > 0 && (
         <div className="flex flex-col gap-1">
-          <h4 className="text-xs font-semibold uppercase" style={{ color: '#8b8b95' }}>
+          <h4 className="text-xs font-semibold uppercase" style={{ color: '#a9b4c8' }}>
             Αναλυτικές βαθμολογίες
           </h4>
           <FieldScoresTable scores={entry.field_scores} />
@@ -232,9 +232,9 @@ function EntryDetails({ entry, title }: { entry: EvaluationEntry; title?: string
 
 // Τιμές πινάκων VERBATIM όπως στη DB: η πηγή έχει σκόπιμα αλλοιωμένες τιμές
 // (π.χ. "02//02/04/2013"), καμία διόρθωση ή μορφοποίηση ημερομηνιών εδώ.
-// Μόνο το null/απόν εμφανίζεται ως "—".
+// Μόνο το null/απόν εμφανίζεται ως "-".
 function verbatim(value: unknown): string {
-  return value === null || value === undefined ? '—' : String(value)
+  return value === null || value === undefined ? '-' : String(value)
 }
 
 interface TableColumn {
@@ -270,12 +270,12 @@ function RowsTable({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <h3 className="text-sm font-semibold" style={{ color: '#f2f2f4' }}>
+      <h3 className="text-sm font-semibold" style={{ color: '#e6eaf2' }}>
         {title}
       </h3>
       <ScrollTable>
         <thead>
-          <tr className="border-b text-left" style={{ borderColor: '#26262d' }}>
+          <tr className="border-b text-left" style={{ borderColor: '#2a3756' }}>
             {columns.map((col) => (
               <th key={col.key} className="py-1 pr-2">
                 {col.label}
@@ -285,7 +285,7 @@ function RowsTable({
         </thead>
         <tbody>
           {rows.map((row, idx) => (
-            <tr key={`${verbatim(row.row_index)}-${idx}`} className="border-b" style={{ borderColor: '#1d1d22' }}>
+            <tr key={`${verbatim(row.row_index)}-${idx}`} className="border-b" style={{ borderColor: '#1e2a44' }}>
               {columns.map((col) => (
                 <td key={col.key} className={col.mono ? 'py-1 pr-2 font-mono' : 'py-1 pr-2'}>
                   {verbatim(row[col.key])}
@@ -381,7 +381,7 @@ function StructuredView({ result, auditId }: { result: StructuredResult; auditId
 
       <CitationList citations={result.citations} />
 
-      <p className="font-mono text-xs" style={{ color: '#8b8b95' }}>
+      <p className="font-mono text-xs" style={{ color: '#a9b4c8' }}>
         Καταχώρηση ελέγχου: #{auditId}
       </p>
     </div>
@@ -402,8 +402,8 @@ export function ResultsPanel({ result, auditId, person }: ResultsPanelProps) {
 
   return (
     <div
-      className="flex flex-col gap-3 rounded border p-4"
-      style={{ borderColor: '#26262d', backgroundColor: '#0e0e11' }}
+      className="flex flex-col gap-3 rounded-2xl border p-5"
+      style={{ borderColor: '#2a3756', backgroundColor: '#0f1a2f' }}
     >
       <PersonHeading person={person} testId="results-person" />
       {result.mode === 'semantic' ? (

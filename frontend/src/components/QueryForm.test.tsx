@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
   CAREER_PERIOD,
@@ -46,11 +46,18 @@ function makeFakeApi(overrides: Partial<QueryFormApi> = {}): QueryFormApi {
   }
 }
 
+async function pickPerson(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(screen.getByRole('combobox', { name: 'Άτομο' }))
+  await user.click(await screen.findByRole('option', { name }))
+}
+
 describe('QueryForm', () => {
-  it('loads persons into the select', async () => {
+  it('loads persons into the person search', async () => {
     const api = makeFakeApi()
+    const user = userEvent.setup()
     render(<QueryForm api={api} onResult={vi.fn()} />)
 
+    await user.click(screen.getByRole('combobox', { name: 'Άτομο' }))
     expect(await screen.findByRole('option', { name: 'Άννα (p1)' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Γιώργος (p2)' })).toBeInTheDocument()
   })
@@ -59,9 +66,65 @@ describe('QueryForm', () => {
     const api = makeFakeApi({
       getPersons: vi.fn(async () => [...PERSONS, { person_id: 'p3', name: '' }]),
     })
+    const user = userEvent.setup()
     render(<QueryForm api={api} onResult={vi.fn()} />)
 
+    await user.click(screen.getByRole('combobox', { name: 'Άτομο' }))
     expect(await screen.findByRole('option', { name: '(p3)' })).toBeInTheDocument()
+  })
+
+  it('filters the person search by Α.Γ.Μ. (Latin M too) or name without accents, and Enter picks without submitting', async () => {
+    const api = makeFakeApi({
+      getPersons: vi.fn(async () => [
+        { person_id: 'Μ-00001', name: 'Άννα' },
+        { person_id: 'Μ-00002', name: 'Γιώργος' },
+      ]),
+    })
+    const onPersonChange = vi.fn()
+    const user = userEvent.setup()
+    render(<QueryForm api={api} onResult={vi.fn()} onPersonChange={onPersonChange} />)
+
+    const combobox = screen.getByRole('combobox', { name: 'Άτομο' })
+    expect(combobox).toHaveAttribute('placeholder', 'Όνομα ή Α.Γ.Μ.')
+    await user.click(combobox)
+    await user.type(combobox, 'm-00002')
+    const listbox = screen.getByRole('listbox', { name: 'Άτομα' })
+    expect(within(listbox).getAllByRole('option').map((o) => o.getAttribute('aria-label'))).toEqual([
+      'Γιώργος (Μ-00002)',
+    ])
+
+    await user.clear(combobox)
+    await user.type(combobox, 'αννα')
+    expect(within(listbox).getAllByRole('option').map((o) => o.getAttribute('aria-label'))).toEqual(['Άννα (Μ-00001)'])
+
+    await user.keyboard('{Enter}')
+    expect(onPersonChange).toHaveBeenCalledWith({ person_id: 'Μ-00001', name: 'Άννα' })
+    expect(api.queryStructured).not.toHaveBeenCalled()
+    expect(combobox).toHaveValue('Άννα')
+  })
+
+  it('Ctrl+K focuses the person search', async () => {
+    const user = userEvent.setup()
+    render(<QueryForm api={makeFakeApi()} onResult={vi.fn()} />)
+
+    await user.keyboard('{Control>}k{/Control}')
+    expect(screen.getByRole('combobox', { name: 'Άτομο' })).toHaveFocus()
+    expect(screen.getByRole('combobox', { name: 'Άτομο' })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('the timeline operation needs no period and asks the parent to reload the timeline', async () => {
+    const api = makeFakeApi()
+    const onTimelineRequest = vi.fn()
+    const user = userEvent.setup()
+    render(<QueryForm api={api} onResult={vi.fn()} onTimelineRequest={onTimelineRequest} />)
+
+    await pickPerson(user, 'Άννα (p1)')
+    await user.selectOptions(screen.getByLabelText('Λειτουργία'), 'timeline')
+    expect(screen.queryByLabelText('Περίοδος')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Υποβολή ερωτήματος/ }))
+    expect(onTimelineRequest).toHaveBeenCalledTimes(1)
+    expect(api.queryStructured).not.toHaveBeenCalled()
   })
 
   it('fetches and shows periods when a person is chosen', async () => {
@@ -69,8 +132,7 @@ describe('QueryForm', () => {
     const user = userEvent.setup()
     render(<QueryForm api={api} onResult={vi.fn()} />)
 
-    await screen.findByRole('option', { name: 'Άννα (p1)' })
-    await user.selectOptions(screen.getByLabelText('Άτομο'), 'p1')
+    await pickPerson(user, 'Άννα (p1)')
 
     expect(api.getPeriods).toHaveBeenCalledWith('p1')
     expect(await screen.findByRole('option', { name: '2024-Q1' })).toBeInTheDocument()
@@ -137,8 +199,7 @@ describe('QueryForm', () => {
     const user = userEvent.setup()
     render(<QueryForm api={api} onResult={onResult} />)
 
-    await screen.findByRole('option', { name: 'Άννα (p1)' })
-    await user.selectOptions(screen.getByLabelText('Άτομο'), 'p1')
+    await pickPerson(user, 'Άννα (p1)')
     await screen.findByRole('option', { name: '2024-Q1' })
     await user.selectOptions(screen.getByLabelText('Λειτουργία'), 'compare_periods')
     await user.selectOptions(screen.getByLabelText('Από'), '2024-Q1')
@@ -162,8 +223,7 @@ describe('QueryForm', () => {
     const user = userEvent.setup()
     render(<QueryForm api={api} onResult={vi.fn()} />)
 
-    await screen.findByRole('option', { name: 'Άννα (p1)' })
-    await user.selectOptions(screen.getByLabelText('Άτομο'), 'p1')
+    await pickPerson(user, 'Άννα (p1)')
     await screen.findByRole('option', { name: '2024-Q1' })
     await user.selectOptions(screen.getByLabelText('Περίοδος'), '2024-Q1')
     await user.click(screen.getByRole('button', { name: 'Σημασιολογική' }))
@@ -182,8 +242,7 @@ describe('QueryForm', () => {
     const user = userEvent.setup()
     render(<QueryForm api={api} onResult={onResult} />)
 
-    await screen.findByRole('option', { name: 'Άννα (p1)' })
-    await user.selectOptions(screen.getByLabelText('Άτομο'), 'p1')
+    await pickPerson(user, 'Άννα (p1)')
     await screen.findByRole('option', { name: '2024-Q1' })
     await user.selectOptions(screen.getByLabelText('Περίοδος'), '2024-Q1')
 
@@ -205,8 +264,7 @@ describe('QueryForm', () => {
     const user = userEvent.setup()
     render(<QueryForm api={api} onResult={onResult} />)
 
-    await screen.findByRole('option', { name: 'Άννα (p1)' })
-    await user.selectOptions(screen.getByLabelText('Άτομο'), 'p1')
+    await pickPerson(user, 'Άννα (p1)')
     await screen.findByRole('option', { name: '2024-Q1' })
     await user.selectOptions(screen.getByLabelText('Περίοδος'), '2024-Q1')
     await user.click(screen.getByRole('button', { name: 'Σημασιολογική' }))
@@ -260,8 +318,7 @@ describe('QueryForm', () => {
         const user = userEvent.setup()
         render(<QueryForm api={api} onResult={onResult} />)
 
-        await screen.findByRole('option', { name: 'Άννα (p1)' })
-        await user.selectOptions(screen.getByLabelText('Άτομο'), 'p1')
+        await pickPerson(user, 'Άννα (p1)')
         await user.selectOptions(screen.getByLabelText('Λειτουργία'), op.value)
         await user.click(screen.getByRole('button', { name: /Υποβολή ερωτήματος/ }))
 
@@ -281,8 +338,7 @@ describe('QueryForm', () => {
       const user = userEvent.setup()
       render(<QueryForm api={api} onResult={vi.fn()} />)
 
-      await screen.findByRole('option', { name: 'Άννα (p1)' })
-      await user.selectOptions(screen.getByLabelText('Άτομο'), 'p1')
+      await pickPerson(user, 'Άννα (p1)')
       await screen.findByRole('option', { name: '2024-Q1' })
       await user.selectOptions(screen.getByLabelText('Λειτουργία'), 'get_promotions_table')
       expect(screen.queryByLabelText('Περίοδος')).not.toBeInTheDocument()
