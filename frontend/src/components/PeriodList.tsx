@@ -11,7 +11,10 @@ interface PeriodListProps {
   // Same y domain as the chart, so bars follow its scale and zoom.
   domain: [number, number]
   // Each action is offered only when its handler is given (feature flags).
-  documentUrl?: (point: TimelinePoint) => string
+  onOpenDocument?: (point: TimelinePoint) => void
+  // Ένα άνοιγμα τη φορά: όσο τρέχει, τα κουμπιά ανοίγματος είναι disabled.
+  documentBusy?: boolean
+  documentMessage?: string | null
   onFlag?: (point: TimelinePoint) => void
   onExportCsv?: () => void
   onExportPdf?: () => void
@@ -26,7 +29,9 @@ export function PeriodList({
   selected,
   onSelect,
   domain,
-  documentUrl,
+  onOpenDocument,
+  documentBusy = false,
+  documentMessage = null,
   onFlag,
   onExportCsv,
   onExportPdf,
@@ -136,16 +141,16 @@ export function PeriodList({
                   </>
                 )}
               </button>
-              {documentUrl && (
-                <a
-                  href={documentUrl(p)}
-                  target="_blank"
-                  rel="noopener noreferrer"
+              {onOpenDocument && (
+                <button
+                  type="button"
+                  onClick={() => onOpenDocument(p)}
+                  disabled={documentBusy}
                   aria-label={`Άνοιγμα PDF ${label}, σελίδα ${p.page ?? 1}`}
-                  className="mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted hover:text-gold"
+                  className="mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted hover:text-gold disabled:opacity-50"
                 >
                   <ExternalIcon size={17} />
-                </a>
+                </button>
               )}
             </li>
           )
@@ -153,15 +158,20 @@ export function PeriodList({
       </ol>
 
       <div className="no-print flex flex-col gap-2.5 border-t border-line p-4">
-        {documentUrl && current && (
-          <a
-            href={documentUrl(current)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex min-h-12 items-center justify-center rounded-lg bg-gold px-4 text-[15px] font-semibold text-bg hover:bg-gold-hover"
+        {onOpenDocument && current && (
+          <button
+            type="button"
+            onClick={() => onOpenDocument(current)}
+            disabled={documentBusy}
+            className="flex min-h-12 items-center justify-center rounded-lg bg-gold px-4 text-[15px] font-semibold text-bg hover:bg-gold-hover disabled:opacity-50"
           >
             {current.page === null ? 'Άνοιγμα PDF' : `Άνοιγμα PDF στη σελίδα ${current.page}`}
-          </a>
+          </button>
+        )}
+        {onOpenDocument && (
+          <p data-testid="document-message" aria-live="polite" className="min-h-[1em] text-[13px] text-danger-soft">
+            {documentMessage}
+          </p>
         )}
         <div className="flex gap-2.5">
           <button

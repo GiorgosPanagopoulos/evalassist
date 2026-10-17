@@ -396,19 +396,28 @@ describe('single person selection', () => {
 // --- feature flags: actions without a backend stay hidden ---------------------
 
 describe('feature flags', () => {
+  const FILE_URL = `api/person/p1/documents/doc-of-A/file?period=${encodeURIComponent(PERIOD_OF.p1)}`
+
   async function loadTimeline(features: Me['features']) {
-    const { api } = makeApi(personRoutes({ 'GET api/auth/me': [200, { ...USER, features }] }))
+    const { api, fetchFn } = makeApi(
+      personRoutes({ 'GET api/auth/me': [200, { ...USER, features }], [`GET ${FILE_URL}`]: [200, {}] }),
+    )
     const user = userEvent.setup()
     render(<App api={api} />)
     await choosePerson(user, 'p1')
     await screen.findByRole('list', { name: 'Λίστα περιόδων' })
-    return user
+    return { user, fetchFn }
   }
 
+  const fileRequests = (fetchFn: ReturnType<typeof makeApi>['fetchFn']) =>
+    fetchFn.mock.calls.filter(([url]) => url.includes('/documents/'))
+
   it('absent flags hide PDF, review flag, export, history and flags in the rail', async () => {
-    await loadTimeline({ semantic_enabled: true })
+    const { fetchFn } = await loadTimeline({ semantic_enabled: true })
 
     expect(screen.queryByRole('link', { name: /Άνοιγμα PDF/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Άνοιγμα PDF/ })).not.toBeInTheDocument()
+    expect(fileRequests(fetchFn)).toEqual([])
     expect(screen.queryByRole('button', { name: /Σήμανση για έλεγχο/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'CSV' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'PDF' })).not.toBeInTheDocument()
@@ -418,14 +427,28 @@ describe('feature flags', () => {
   })
 
   it('document_file_enabled opens the selected period at its page', async () => {
-    await loadTimeline({ semantic_enabled: true, document_file_enabled: true, export_enabled: true })
+    const tab = { opener: {}, document: { title: '', body: { textContent: '' } }, location: { href: '' }, close: vi.fn() }
+    const open = vi.spyOn(window, 'open').mockImplementation(() => tab as unknown as Window)
+    URL.createObjectURL = vi.fn(() => 'blob:http://10.0.0.5/abc')
+    URL.revokeObjectURL = vi.fn()
+    try {
+      const { user, fetchFn } = await loadTimeline({
+        semantic_enabled: true,
+        document_file_enabled: true,
+        export_enabled: true,
+      })
+      // Καμία προφόρτωση: request μόνο με το κλικ.
+      expect(fileRequests(fetchFn)).toEqual([])
 
-    const open = screen.getByRole('link', { name: 'Άνοιγμα PDF στη σελίδα 7' })
-    expect(open).toHaveAttribute(
-      'href',
-      `api/person/p1/documents/doc-of-A/file?period=${encodeURIComponent(PERIOD_OF.p1)}#page=7`,
-    )
-    expect(screen.getByRole('button', { name: 'CSV' })).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Άνοιγμα PDF στη σελίδα 7' }))
+
+      await waitFor(() => expect(tab.location.href).toBe('blob:http://10.0.0.5/abc#page=7'))
+      expect(open).toHaveBeenCalledWith('', '_blank')
+      expect(fileRequests(fetchFn).map(([url]) => url)).toEqual([FILE_URL])
+      expect(screen.getByRole('button', { name: 'CSV' })).toBeInTheDocument()
+    } finally {
+      open.mockRestore()
+    }
   })
 })
 

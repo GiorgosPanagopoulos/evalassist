@@ -39,7 +39,10 @@ def _me(
         username=username,
         role=role,
         must_change_pw=must_change_pw,
-        features=Features(semantic_enabled=settings.SEMANTIC_ENABLED),
+        features=Features(
+            semantic_enabled=settings.SEMANTIC_ENABLED,
+            document_file_enabled=settings.DOCS_ROOT is not None and settings.DOCS_ROOT.is_dir(),
+        ),
     )
 
 

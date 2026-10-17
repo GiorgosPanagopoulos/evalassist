@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { ApiClient, ApiError } from '../api/client'
 import type { PersonOut, TimelinePoint, TimelineResult } from '../api/types'
 import type { UiFlags } from '../lib/flags'
+import { DOCUMENT_UNAVAILABLE, POPUP_BLOCKED, openDocument } from '../lib/openDocument'
 import { scaleDomain, timelineCsv, type ScaleMode } from '../lib/timeline'
 import type { QueryMode } from './ModeBadge'
 import { PeriodList } from './PeriodList'
@@ -10,7 +11,8 @@ import { StatusFooter } from './StatusFooter'
 import { TimelineChart } from './TimelineChart'
 
 // Structural subset ώστε τα tests να περνάνε plain fake αντί για ApiClient.
-export type TimelinePanelApi = Pick<ApiClient, 'getTimeline'>
+// Χωρίς documentFile δεν εμφανίζεται άνοιγμα PDF, όποιο κι αν είναι το flag.
+export type TimelinePanelApi = Pick<ApiClient, 'getTimeline'> & Partial<Pick<ApiClient, 'documentFile'>>
 
 interface TimelinePanelProps {
   api: TimelinePanelApi
@@ -26,12 +28,6 @@ interface TimelinePanelProps {
 export const NO_PERSON_TEXT = 'Επιλέξτε άτομο από την αναζήτηση'
 
 const ENDPOINT = 'GET /api/person/{person_id}/timeline'
-
-// Proposed endpoint, see the backend PR plan. Used only behind documentFile.
-function documentUrl(personId: string, point: TimelinePoint): string {
-  const base = `api/person/${encodeURIComponent(personId)}/documents/${encodeURIComponent(point.doc_id)}/file`
-  return `${base}?period=${encodeURIComponent(point.period)}#page=${point.page ?? 1}`
-}
 
 function download(name: string, text: string) {
   const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }))
@@ -50,6 +46,27 @@ export function TimelinePanel({ api, person, mode = 'structured', flags, reloadK
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<number | null>(null)
   const [scale, setScale] = useState<ScaleMode>('fixed')
+  const [documentBusy, setDocumentBusy] = useState(false)
+  const [documentMessage, setDocumentMessage] = useState<string | null>(null)
+
+  // Το μήνυμα αφορά το έγγραφο που ζητήθηκε: σβήνει με νέα επιλογή ή άτομο.
+  useEffect(() => setDocumentMessage(null), [selected, personId])
+
+  const documentFile = api.documentFile?.bind(api)
+  const canOpenDocument = flags?.documentFile === true && documentFile !== undefined
+
+  async function handleOpenDocument(point: TimelinePoint) {
+    if (!documentFile || documentBusy) return
+    setDocumentMessage(null)
+    setDocumentBusy(true)
+    try {
+      const outcome = await openDocument({ documentFile }, personId, point)
+      if (outcome === 'unavailable') setDocumentMessage(DOCUMENT_UNAVAILABLE)
+      if (outcome === 'popup_blocked') setDocumentMessage(POPUP_BLOCKED)
+    } finally {
+      setDocumentBusy(false)
+    }
+  }
 
   useEffect(() => {
     // Καθαρισμός πριν από κάθε νέο άτομο: η χρονογραμμή του προηγούμενου δεν
@@ -130,7 +147,9 @@ export function TimelinePanel({ api, person, mode = 'structured', flags, reloadK
                   selected={selected}
                   onSelect={setSelected}
                   domain={scaleDomain(scale, points)}
-              documentUrl={flags?.documentFile ? (p) => documentUrl(person.person_id, p) : undefined}
+              onOpenDocument={canOpenDocument ? handleOpenDocument : undefined}
+              documentBusy={documentBusy}
+              documentMessage={documentMessage}
               onExportCsv={
                 flags?.export ? () => download(`timeline-${person.person_id}.csv`, timelineCsv(person.person_id, points)) : undefined
               }
