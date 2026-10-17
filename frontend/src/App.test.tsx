@@ -29,6 +29,10 @@ function makeApi(routes: Routes) {
   return { api: new ApiClient(undefined, fetchFn as unknown as typeof fetch), fetchFn }
 }
 
+async function openUserMenu(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: 'Μενού χρήστη' }))
+}
+
 const COMMON: Routes = {
   'GET api/health': [200, { status: 'ok', ollama_reachable: true }],
   'GET api/persons': [200, PERSONS],
@@ -48,7 +52,8 @@ describe('App auth flow', () => {
     await user.type(screen.getByLabelText('Κωδικός'), 'synthetic-pass-0001')
     await user.click(screen.getByRole('button', { name: 'Σύνδεση' }))
 
-    expect(await screen.findByRole('button', { name: 'Αποσύνδεση' })).toBeInTheDocument()
+    await openUserMenu(user)
+    expect(screen.getByRole('menuitem', { name: 'Αποσύνδεση' })).toBeInTheDocument()
     expect(screen.getByLabelText('Συνδεδεμένος χρήστης')).toHaveTextContent('alice')
     // Κανένα αίτημα δεδομένων πριν από το login.
     const firstLogin = fetchFn.mock.calls.findIndex(([url]) => url === 'api/auth/login')
@@ -82,11 +87,11 @@ describe('App auth flow', () => {
     const user = userEvent.setup()
     render(<App api={api} />)
 
-    await screen.findByRole('option', { name: /Συνθετικός Α/ })
-    await user.selectOptions(screen.getByLabelText('Άτομο'), 'p1')
+    await user.click(await screen.findByRole('combobox', { name: 'Άτομο' }))
+    await user.click(await screen.findByRole('option', { name: /Συνθετικός Α/ }))
 
     expect(await screen.findByRole('form', { name: 'Σύνδεση' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Αποσύνδεση' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Μενού χρήστη' })).not.toBeInTheDocument()
   })
 
   it('must_change_pw shows only the change-password page, then the app after the change', async () => {
@@ -125,10 +130,12 @@ describe('App auth flow', () => {
 
   it('user management is not shown to a plain user', async () => {
     const { api } = makeApi({ ...COMMON, 'GET api/auth/me': [200, USER] })
+    const user = userEvent.setup()
     render(<App api={api} />)
 
-    expect(await screen.findByRole('button', { name: 'Αποσύνδεση' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Χρήστες' })).not.toBeInTheDocument()
+    await openUserMenu(user)
+    expect(screen.getByRole('menuitem', { name: 'Αποσύνδεση' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Χρήστες' })).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Διαχείριση χρηστών' })).not.toBeInTheDocument()
   })
 
@@ -144,7 +151,8 @@ describe('App auth flow', () => {
     const user = userEvent.setup()
     render(<App api={api} />)
 
-    await user.click(await screen.findByRole('button', { name: 'Χρήστες' }))
+    await openUserMenu(user)
+    await user.click(screen.getByRole('menuitem', { name: 'Χρήστες' }))
 
     expect(await screen.findByRole('region', { name: 'Διαχείριση χρηστών' })).toBeInTheDocument()
     expect(await screen.findByRole('cell', { name: 'root' })).toBeInTheDocument()
@@ -159,7 +167,8 @@ describe('App auth flow', () => {
     const user = userEvent.setup()
     render(<App api={api} />)
 
-    await user.click(await screen.findByRole('button', { name: 'Αποσύνδεση' }))
+    await openUserMenu(user)
+    await user.click(screen.getByRole('menuitem', { name: 'Αποσύνδεση' }))
 
     expect(await screen.findByRole('form', { name: 'Σύνδεση' })).toBeInTheDocument()
     expect(fetchFn.mock.calls.some(([url, init]) => url === 'api/auth/logout' && init?.method === 'POST')).toBe(true)
@@ -252,8 +261,9 @@ function personRoutes(overrides: Routes = {}): Routes {
 }
 
 async function choosePerson(user: ReturnType<typeof userEvent.setup>, personId: string) {
-  await screen.findByRole('option', { name: /Συνθετικός Α/ })
-  await user.selectOptions(screen.getByLabelText('Άτομο'), personId)
+  await user.click(await screen.findByRole('combobox', { name: 'Άτομο' }))
+  const listbox = screen.getByRole('listbox', { name: 'Άτομα' })
+  await user.click(await within(listbox).findByRole('option', { name: new RegExp(`\\(${personId}\\)$`) }))
 }
 
 async function submitScores(user: ReturnType<typeof userEvent.setup>, personId: string) {
@@ -269,7 +279,7 @@ describe('single person selection', () => {
     render(<App api={api} />)
 
     const timeline = await screen.findByRole('region', { name: 'Χρονογραμμή βαθμολογίας' })
-    expect(within(timeline).getByText('Επιλέξτε άτομο από αριστερά')).toBeInTheDocument()
+    expect(within(timeline).getByText('Επιλέξτε άτομο από την αναζήτηση')).toBeInTheDocument()
 
     await choosePerson(user, 'p1')
 
@@ -281,15 +291,43 @@ describe('single person selection', () => {
 
   it('has exactly one person dropdown in the DOM', async () => {
     const { api } = makeApi(personRoutes())
+    const user = userEvent.setup()
     render(<App api={api} />)
 
-    await screen.findByRole('option', { name: /Συνθετικός Α/ })
+    await user.click(await screen.findByRole('combobox', { name: 'Άτομο' }))
+    const personOptions = await screen.findAllByRole('option', { name: /Συνθετικός Α/ })
+    expect(personOptions).toHaveLength(1)
+    const listboxId = personOptions[0].closest('[role="listbox"]')?.id
     const personSelects = screen
       .getAllByRole('combobox')
-      .filter((el) => within(el).queryByRole('option', { name: /Συνθετικός Α/ }))
+      .filter((el) => listboxId && el.getAttribute('aria-controls') === listboxId)
     expect(personSelects).toHaveLength(1)
     expect(personSelects[0]).toHaveAccessibleName('Άτομο')
     expect(screen.queryByLabelText('Άτομο χρονογραμμής')).not.toBeInTheDocument()
+  })
+
+  it('typing in the person search fetches nothing person-scoped until an option is chosen', async () => {
+    const { api, fetchFn } = makeApi(personRoutes())
+    const user = userEvent.setup()
+    render(<App api={api} />)
+
+    const combobox = await screen.findByRole('combobox', { name: 'Άτομο' })
+    await user.click(combobox)
+    await user.type(combobox, 'Συνθετικός')
+    const listbox = screen.getByRole('listbox', { name: 'Άτομα' })
+    expect(await within(listbox).findAllByRole('option')).toHaveLength(2)
+    await user.type(combobox, ' Β')
+    expect(within(listbox).getAllByRole('option')).toHaveLength(1)
+
+    const personScoped = () =>
+      fetchFn.mock.calls.map(([url]) => String(url)).filter((url) => /\/(timeline|periods)$/.test(url))
+    expect(personScoped()).toEqual([])
+    expect(screen.queryByTestId('timeline-person')).not.toBeInTheDocument()
+
+    await user.click(within(listbox).getByRole('option', { name: /\(p2\)$/ }))
+
+    await waitFor(() => expect(personScoped()).toContain('api/person/p2/timeline'))
+    expect(personScoped().some((url) => url.includes('p1'))).toBe(false)
   })
 
   it('switching A -> B clears A results; the screen never shows two persons', async () => {
@@ -302,7 +340,7 @@ describe('single person selection', () => {
     expect(await screen.findByTestId('results-person')).toHaveTextContent('Άτομο: Συνθετικός Α (p1)')
     expect(screen.getByTestId('citations')).toHaveTextContent('doc-of-A')
 
-    await user.selectOptions(screen.getByLabelText('Άτομο'), 'p2')
+    await choosePerson(user, 'p2')
 
     expect(screen.queryByTestId('results-person')).not.toBeInTheDocument()
     expect(screen.queryByTestId('citations')).not.toBeInTheDocument()
@@ -342,7 +380,7 @@ describe('single person selection', () => {
       expect(fetchFn.mock.calls.some(([url]) => url === 'api/query/structured')).toBe(true),
     )
 
-    await user.selectOptions(screen.getByLabelText('Άτομο'), 'p2')
+    await choosePerson(user, 'p2')
     expect(await screen.findByText(/έγγραφα: doc-of-B/)).toBeInTheDocument()
     release()
     // Η απάντηση του Α ολοκληρώνεται (το κουμπί ξαναενεργοποιείται) αλλά δεν εμφανίζεται.
@@ -352,5 +390,95 @@ describe('single person selection', () => {
     expect(screen.queryByTestId('results-person')).not.toBeInTheDocument()
     expect(document.body.textContent).not.toContain('doc-of-A')
     expect(screen.getByTestId('timeline-person')).toHaveTextContent('Άτομο: Συνθετικός Β (p2)')
+  })
+})
+
+// --- feature flags: actions without a backend stay hidden ---------------------
+
+describe('feature flags', () => {
+  async function loadTimeline(features: Me['features']) {
+    const { api } = makeApi(personRoutes({ 'GET api/auth/me': [200, { ...USER, features }] }))
+    const user = userEvent.setup()
+    render(<App api={api} />)
+    await choosePerson(user, 'p1')
+    await screen.findByRole('list', { name: 'Λίστα περιόδων' })
+    return user
+  }
+
+  it('absent flags hide PDF, review flag, export, history and flags in the rail', async () => {
+    await loadTimeline({ semantic_enabled: true })
+
+    expect(screen.queryByRole('link', { name: /Άνοιγμα PDF/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Σήμανση για έλεγχο/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'CSV' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'PDF' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Ιστορικό ελέγχου' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Σημάνσεις' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Αντιγραφή παραπομπής' })).toBeEnabled()
+  })
+
+  it('document_file_enabled opens the selected period at its page', async () => {
+    await loadTimeline({ semantic_enabled: true, document_file_enabled: true, export_enabled: true })
+
+    const open = screen.getByRole('link', { name: 'Άνοιγμα PDF στη σελίδα 7' })
+    expect(open).toHaveAttribute(
+      'href',
+      `api/person/p1/documents/doc-of-A/file?period=${encodeURIComponent(PERIOD_OF.p1)}#page=7`,
+    )
+    expect(screen.getByRole('button', { name: 'CSV' })).toBeInTheDocument()
+  })
+})
+
+describe('timeline workspace', () => {
+  it('shows the person card, the mode badge and the footer, never the doc hash in the card', async () => {
+    const { api } = makeApi(personRoutes())
+    const user = userEvent.setup()
+    render(<App api={api} />)
+    await choosePerson(user, 'p1')
+
+    const card = await screen.findByTestId('timeline-person')
+    expect(card.closest('div.rounded-2xl')?.textContent).not.toContain('doc-of-A')
+    expect(screen.getByTestId('mode-badge')).toHaveTextContent('Ντετερμινιστικό · χωρίς LLM')
+    expect(screen.getByTestId('status-footer')).toHaveTextContent('audit #100')
+    expect(screen.getByTestId('status-footer')).toHaveTextContent('GET /api/person/{person_id}/timeline')
+
+    await user.click(screen.getByRole('button', { name: 'Σημασιολογική' }))
+    expect(screen.getByTestId('mode-badge')).toHaveTextContent('LLM · επαλήθευσε τις πηγές')
+  })
+
+  it('selecting a period in the list selects it in the chart and shows its citation', async () => {
+    const { api } = makeApi(personRoutes())
+    const user = userEvent.setup()
+    render(<App api={api} />)
+    await choosePerson(user, 'p1')
+
+    const row = await screen.findByRole('button', { name: /Ε\.Α\., βαθμός 90/ })
+    expect(row).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('ea-point')).toHaveAttribute('data-selected', 'true')
+    expect(screen.getByTestId('selected-citation')).toHaveTextContent('doc-of-A · σελ. 7 · ΣΥΝΟΛΙΚΗ ΕΜΦΑΝΙΣΗ')
+  })
+
+  it('no "submit a query" prompt is shown once a person is chosen', async () => {
+    const { api } = makeApi(personRoutes())
+    const user = userEvent.setup()
+    render(<App api={api} />)
+    await choosePerson(user, 'p1')
+    await submitScores(user, 'p1')
+
+    expect(await screen.findByTestId('results-person')).toBeInTheDocument()
+    expect(screen.queryByText(/Υποβάλετε ένα ερώτημα/)).not.toBeInTheDocument()
+  })
+})
+
+describe('avatar', () => {
+  it('uses the Greek display name initials when /me sends one, else the username', async () => {
+    const { api } = makeApi({ ...COMMON, 'GET api/auth/me': [200, { ...USER, display_name: 'Γεώργιος Παναγόπουλος' }] })
+    const { unmount } = render(<App api={api} />)
+    expect(await screen.findByRole('button', { name: 'Μενού χρήστη' })).toHaveTextContent('ΓΠ')
+    unmount()
+
+    const { api: plain } = makeApi({ ...COMMON, 'GET api/auth/me': [200, USER] })
+    render(<App api={plain} />)
+    expect(await screen.findByRole('button', { name: 'Μενού χρήστη' })).toHaveTextContent('AL')
   })
 })

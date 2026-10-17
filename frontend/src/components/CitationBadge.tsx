@@ -6,7 +6,7 @@ export function CitationBadge({ citation }: { citation: StructuredCitation }) {
   return (
     <span
       className="inline-flex items-center gap-1 rounded border px-2 py-1 font-mono text-xs"
-      style={{ borderColor: '#26262d', backgroundColor: '#131318', color: '#8b8b95' }}
+      style={{ borderColor: '#2a3756', backgroundColor: '#111c33', color: '#a9b4c8' }}
     >
       <span className="font-semibold">{citation.doc_id}</span>
       <span aria-hidden>·</span>
@@ -21,7 +21,7 @@ export function CitationList({ citations }: { citations: StructuredCitation[] })
   return (
     <div data-testid="citations" className="flex flex-wrap gap-2">
       {citations.length === 0 ? (
-        <span className="text-xs" style={{ color: '#8b8b95' }}>
+        <span className="text-xs" style={{ color: '#a9b4c8' }}>
           Καμία παραπομπή
         </span>
       ) : (

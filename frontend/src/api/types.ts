@@ -118,11 +118,18 @@ export type UserRole = 'admin' | 'user'
 
 export interface Features {
   semantic_enabled: boolean
+  // UI flags for endpoints that do not exist yet. Absent means false.
+  document_file_enabled?: boolean
+  review_flags_enabled?: boolean
+  audit_history_enabled?: boolean
+  export_enabled?: boolean
 }
 
 export interface Me {
   id: number
   username: string
+  // Not sent by the backend yet; avatar initials fall back to the username.
+  display_name?: string | null
   role: UserRole
   must_change_pw: boolean
   features: Features

@@ -70,11 +70,11 @@ export function ChangePasswordPage({ api, forced, onChanged, onCancel, onLogout 
         style={CARD_STYLE}
         aria-label="Αλλαγή κωδικού"
       >
-        <h1 className="text-[15px] font-bold" style={{ color: '#f2f2f4' }}>
+        <h1 className="text-[15px] font-bold" style={{ color: '#e6eaf2' }}>
           Αλλαγή κωδικού
         </h1>
         {forced && (
-          <p className="text-[12.5px]" style={{ color: '#c9c9d1' }}>
+          <p className="text-[12.5px]" style={{ color: '#c4ccdb' }}>
             Πρέπει να αλλάξετε τον προσωρινό κωδικό πριν συνεχίσετε.
           </p>
         )}

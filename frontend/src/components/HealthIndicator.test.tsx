@@ -4,7 +4,7 @@ import { ApiError } from '../api/client'
 import type { HealthResponse } from '../api/types'
 import { HealthIndicator, type HealthIndicatorApi } from './HealthIndicator'
 
-const GREEN = '#3fdd78'
+const GREEN = '#3fb68b'
 const AMBER = '#f59e0b'
 
 function apiReturning(health: HealthResponse): HealthIndicatorApi {

@@ -29,20 +29,20 @@ export function SemanticAnswer({ answer, citations, auditId, routingHint, refusa
         <div
           data-testid="refusal"
           className="flex flex-col gap-2 rounded border px-3 py-3 text-sm"
-          style={{ borderColor: '#26262d' }}
+          style={{ borderColor: '#2a3756' }}
         >
-          <p className="font-semibold" style={{ color: '#f2f2f4' }}>
+          <p className="font-semibold" style={{ color: '#e6eaf2' }}>
             Το ερώτημα δεν εκτελέστηκε
           </p>
-          <p className="leading-relaxed" style={{ color: '#f2f2f4' }}>
+          <p className="leading-relaxed" style={{ color: '#e6eaf2' }}>
             {answer}
           </p>
-          <p className="font-mono text-xs" style={{ color: '#8b8b95' }}>
+          <p className="font-mono text-xs" style={{ color: '#a9b4c8' }}>
             Αιτία: {refusalReason}
           </p>
         </div>
 
-        <p className="font-mono text-xs" style={{ color: '#8b8b95' }}>
+        <p className="font-mono text-xs" style={{ color: '#a9b4c8' }}>
           Καταχώρηση ελέγχου: #{auditId}
         </p>
       </div>
@@ -59,14 +59,14 @@ export function SemanticAnswer({ answer, citations, auditId, routingHint, refusa
       {isEmptyScope ? (
         <EmptyState />
       ) : (
-        <p className="text-sm leading-relaxed" style={{ color: '#f2f2f4' }}>
+        <p className="text-sm leading-relaxed" style={{ color: '#e6eaf2' }}>
           {answer}
         </p>
       )}
 
       <CitationList citations={citations} />
 
-      <p className="font-mono text-xs" style={{ color: '#8b8b95' }}>
+      <p className="font-mono text-xs" style={{ color: '#a9b4c8' }}>
         Καταχώρηση ελέγχου: #{auditId}
       </p>
     </div>
