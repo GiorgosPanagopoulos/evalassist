@@ -1,3 +1,4 @@
+import logging
 import re
 import sqlite3
 from pathlib import Path
@@ -7,10 +8,25 @@ from app.core.config import get_settings
 DB_PATH = get_settings().DB_PATH
 SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
 
+logger = logging.getLogger(__name__)
+
+# Μία προειδοποίηση ανά βάση και διεργασία, όχι σε κάθε request.
+_non_wal_warned: set[Path] = set()
+
 
 def get_connection(db_path: Path = DB_PATH) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    # Ασφαλές: μία σύνδεση ανά request (get_db), ποτέ κοινή· απλώς την παίρνουν διαδοχικά threads.
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+    journal_mode = conn.execute("PRAGMA journal_mode = WAL").fetchone()[0]
+    if journal_mode.lower() != "wal" and db_path not in _non_wal_warned:
+        # Συνήθως network filesystem (SMB, NFS, mapped drive): βλ. deploy/README.md, βήμα 5.
+        _non_wal_warned.add(db_path)
+        logger.warning(
+            "Η βάση δεν μπήκε σε WAL mode (journal_mode=%s): πρέπει να είναι σε τοπικό δίσκο",
+            journal_mode,
+        )
+    conn.execute("PRAGMA busy_timeout = 5000")
     conn.execute("PRAGMA foreign_keys = ON")
     conn.row_factory = sqlite3.Row
     return conn

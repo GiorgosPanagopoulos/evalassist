@@ -31,6 +31,7 @@
 |---|---|
 | Python | ≥ 3.11 (στον server: `<CHANGEME_PYTHON>`), με `venv`, `sqlite3` και `hashlib.scrypt` |
 | Node.js + npm | μόνο για το build, δοκιμασμένο με Node 24 (`<CHANGEME_NODE>`) |
+| `sqlite3` (CLI) | για το backup της βάσης (βήμα 6) |
 
 Έλεγχος της Python:
 
@@ -127,7 +128,36 @@ install -m 600 <παραδοθέν αρχείο> <CHANGEME_DB_PATH>
 ```
 
 Ο ιδιοκτήτης του αρχείου και του φακέλου του είναι ο χρήστης της υπηρεσίας:
-το SQLite γράφει δίπλα στη βάση προσωρινά αρχεία (journal).
+η βάση είναι σε WAL mode και το SQLite γράφει δίπλα της τα `<βάση>-wal` και
+`<βάση>-shm`. **Τα `-wal`/`-shm` περιέχουν προσωπικά δεδομένα** (σελίδες της
+βάσης που δεν έχουν περάσει ακόμα στο κύριο αρχείο) και δημιουργούνται με το
+umask της υπηρεσίας, όχι με το 600 της βάσης. Γι' αυτό προστατεύεται ο
+φάκελος, όχι μόνο το αρχείο. Ποτέ μη σβήνετε ή αντιγράφετε μόνα τους τα
+`-wal`/`-shm` ενώ τρέχει η υπηρεσία.
+
+**Το `<CHANGEME_DATA_DIR>` ΠΡΕΠΕΙ να είναι σε τοπικό δίσκο.** Το WAL δεν
+υποστηρίζεται σε network filesystem (SMB, NFS, mapped drive): η μνήμη που
+μοιράζονται οι συνδέσεις μέσω του `-shm` δεν λειτουργεί σωστά πάνω από δίκτυο
+και η βάση μπορεί να καταστραφεί. Αν το SQLite αρνηθεί το WAL, το API και το
+migration γράφουν στο log «Η βάση δεν μπήκε σε WAL mode (journal_mode=...)».
+Η απουσία της προειδοποίησης δεν αποδεικνύει τοπικό δίσκο: σε ορισμένα network
+filesystems το WAL ενεργοποιείται κανονικά και το πρόβλημα φαίνεται αργότερα.
+
+Linux: ο φάκελος της βάσης 700, μόνο για τον χρήστη της υπηρεσίας.
+
+```sh
+chown <CHANGEME_SERVICE_USER>: <CHANGEME_DATA_DIR>
+chmod 700 <CHANGEME_DATA_DIR>
+```
+
+Windows: ACL χωρίς κληρονομικότητα, μόνο για τον λογαριασμό της υπηρεσίας.
+
+```bat
+icacls <CHANGEME_DATA_DIR> /inheritance:r /grant:r "<CHANGEME_SERVICE_USER>:(OI)(CI)M"
+```
+
+Τα ίδια ισχύουν για το `<CHANGEME_BACKUP_DIR>`: τα backups είναι πλήρη
+αντίγραφα της βάσης.
 
 ## 6. Migration, ΠΡΙΝ από το API
 
@@ -135,12 +165,17 @@ install -m 600 <παραδοθέν αρχείο> <CHANGEME_DB_PATH>
 και μετά από κάθε αναβάθμιση του κώδικα:
 
 ```sh
-cp <CHANGEME_DB_PATH> <CHANGEME_BACKUP_DIR>/evalassist-$(date +%Y%m%d-%H%M).db   # backup
+sqlite3 <CHANGEME_DB_PATH> ".backup <CHANGEME_BACKUP_DIR>/evalassist-$(date +%Y%m%d-%H%M).db"   # backup
 cd <CHANGEME_APP_DIR>/backend
 ../.venv/bin/python -m app.db.database
 ```
 
-Τρέχει όσες φορές χρειαστεί χωρίς να αλλάξει κάτι αν η βάση είναι ήδη
+Το backup γίνεται με `.backup` και όχι με `cp`: με WAL, ό,τι έχει γίνει
+commit μπορεί να βρίσκεται ακόμα στο `-wal`, και ένα `cp` μόνο του κύριου
+αρχείου θα το έχανε. Το `.backup` δίνει ένα συνεπές, αυτοτελές αρχείο ακόμη
+και με την υπηρεσία σε λειτουργία.
+
+Το migration τρέχει όσες φορές χρειαστεί χωρίς να αλλάξει κάτι αν η βάση είναι ήδη
 ενημερωμένη.
 
 ## 7. Πρώτος admin

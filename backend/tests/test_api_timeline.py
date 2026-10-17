@@ -9,6 +9,9 @@
   - negative: κανένα Σ.Α. point δεν παίρνει τιμή από γειτονικό point.
   - negative: >1 έγγραφα για το ίδιο (person_id, period) -> ValueError/400,
     ποτέ σιωπηλό LIMIT 1.
+  - negative: exception μέσα στο endpoint μετά το auth -> 500 και ακριβώς μία
+    γραμμή audit. Αν αποτύχει και το audit του error path: 500 χωρίς
+    δεδομένα, και το σφάλμα του audit γίνεται log (μόνο ο τύπος).
 Επιπλέον, αν υπάρχει η πραγματική ΒΔ (backend/data/evalassist.db), ο ίδιος
 positive έλεγχος τρέχει και πάνω της.
 
@@ -16,6 +19,7 @@ positive έλεγχος τρέχει και πάνω της.
 """
 
 import json
+import logging
 import os
 import shutil
 import sqlite3
@@ -26,8 +30,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from auth_helpers import TEST_USERNAME, logged_in_client  # noqa: E402
+from auth_helpers import BASE_URL, TEST_USERNAME, logged_in_client, login, make_user  # noqa: E402
+from db_helpers import remove_db  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 
+from app.api import routes_timeline  # noqa: E402
 from app.api.main import app  # noqa: E402
 from app.core.config import Settings, get_settings  # noqa: E402
 from app.db import repository  # noqa: E402
@@ -179,7 +186,7 @@ def test_timeline_returns_36_points_32_scored_4_null_all_sa():
         assert by_period["2012-09-14..2012-12-31"]["page"] == 7
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_timeline_writes_one_audit_row_with_structured_mode():
@@ -207,7 +214,7 @@ def test_timeline_writes_one_audit_row_with_structured_mode():
         assert row["other_period"] is None
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_other_person_never_gets_m01253_data():
@@ -237,7 +244,7 @@ def test_other_person_never_gets_m01253_data():
         assert len(_audit_rows(db_path)) == 2
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_sa_points_never_take_value_from_neighbours():
@@ -266,7 +273,7 @@ def test_sa_points_never_take_value_from_neighbours():
         assert '"score":""' not in raw.replace(" ", "")
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_multiple_documents_for_same_period_is_error_not_limit_1():
@@ -298,7 +305,109 @@ def test_multiple_documents_for_same_period_is_error_not_limit_1():
         assert rows[0]["period"] == "all"
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
+
+
+def _client_returning_500s(db_path: Path) -> TestClient:
+    """Όπως το logged_in_client, αλλά τα unhandled exceptions γίνονται 500
+    responses (όπως στον server) αντί να φτάνουν στο test."""
+    make_user(db_path)
+    client = TestClient(app, base_url=BASE_URL, raise_server_exceptions=False)
+    login(client)
+    return client
+
+
+def _synthetic_failure(*args, **kwargs):
+    raise RuntimeError("synthetic failure")
+
+
+class _Records(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__(level=logging.DEBUG)
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+def test_exception_inside_endpoint_after_auth_writes_exactly_one_audit_row():
+    db_path = _make_temp_db()
+    original = routes_timeline.get_timeline
+    try:
+        _override_settings(db_path)
+        client = _client_returning_500s(db_path)
+        routes_timeline.get_timeline = _synthetic_failure
+
+        response = client.get(f"/api/person/{PERSON}/timeline")
+
+        assert response.status_code == 500, response.text
+        assert response.json() == {"detail": "Internal server error"}
+        rows = _audit_rows(db_path)
+        assert len(rows) == 1
+        assert rows[0]["mode"] == "structured"
+        assert rows[0]["user"] == TEST_USERNAME
+        assert json.loads(rows[0]["retrieved_doc_ids"]) == []
+        assert rows[0]["answer_text"] is None
+        assert (rows[0]["person_id"], rows[0]["period"]) == (PERSON, "all")
+    finally:
+        routes_timeline.get_timeline = original
+        _clear_overrides()
+        remove_db(db_path)
+
+
+def test_failed_error_path_audit_is_logged_and_returns_no_data():
+    db_path = _make_temp_db()
+    original_timeline = routes_timeline.get_timeline
+    original_audit = routes_timeline.write_audit
+    records = _Records()
+    logger = logging.getLogger(routes_timeline.__name__)
+    try:
+        _override_settings(db_path)
+        client = _client_returning_500s(db_path)
+        routes_timeline.get_timeline = _synthetic_failure
+
+        def locked(*args, **kwargs):
+            raise sqlite3.OperationalError("database is locked")
+
+        routes_timeline.write_audit = locked
+        logger.addHandler(records)
+
+        response = client.get(f"/api/person/{PERSON}/timeline")
+
+        assert response.status_code == 500, response.text
+        assert response.json() == {"detail": "Internal server error"}
+        assert _audit_rows(db_path) == []
+        errors = [r for r in records.records if r.levelno >= logging.ERROR]
+        assert len(errors) == 1, [r.getMessage() for r in records.records]
+        message = errors[0].getMessage()
+        assert "audit" in message and "OperationalError" in message, message
+        assert PERSON not in message and "database is locked" not in message, message
+    finally:
+        logger.removeHandler(records)
+        routes_timeline.get_timeline = original_timeline
+        routes_timeline.write_audit = original_audit
+        _clear_overrides()
+        remove_db(db_path)
+
+
+def test_failed_success_path_audit_returns_no_data():
+    db_path = _make_temp_db()
+    original_audit = routes_timeline.write_audit
+    try:
+        _override_settings(db_path)
+        client = _client_returning_500s(db_path)
+        routes_timeline.write_audit = _synthetic_failure
+
+        response = client.get(f"/api/person/{PERSON}/timeline")
+
+        assert response.status_code == 500, response.text
+        assert response.json() == {"detail": "Internal server error"}
+        assert DOC_ID not in response.text and "points" not in response.text
+        assert _audit_rows(db_path) == []
+    finally:
+        routes_timeline.write_audit = original_audit
+        _clear_overrides()
+        remove_db(db_path)
 
 
 def test_real_db_m01253_if_present():
@@ -331,7 +440,7 @@ def test_real_db_m01253_if_present():
         assert (row["person_id"], row["period"], row["other_period"]) == (PERSON, "all", None)
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def run_all():
@@ -341,6 +450,9 @@ def run_all():
         test_other_person_never_gets_m01253_data,
         test_sa_points_never_take_value_from_neighbours,
         test_multiple_documents_for_same_period_is_error_not_limit_1,
+        test_exception_inside_endpoint_after_auth_writes_exactly_one_audit_row,
+        test_failed_error_path_audit_is_logged_and_returns_no_data,
+        test_failed_success_path_audit_returns_no_data,
         test_real_db_m01253_if_present,
     ]
     for test in tests:

@@ -31,6 +31,7 @@ import uvicorn
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from auth_helpers import TEST_PASSWORD, TEST_USERNAME, make_user  # noqa: E402
+from db_helpers import remove_db  # noqa: E402
 
 from app.api.deps import get_semantic_retriever_factory  # noqa: E402
 from app.api.main import create_app  # noqa: E402
@@ -223,7 +224,7 @@ def test_no_request_content_in_any_log_or_stderr():
                     statuses["semantic_raise"] = boom.status_code
             captured = output.getvalue()
     finally:
-        os.remove(db_path)
+        remove_db(db_path)
 
     # Τα αιτήματα έφτασαν πραγματικά στα δεδομένα: αλλιώς ένα καθαρό log
     # θα σήμαινε απλώς ότι δεν έγινε τίποτα.

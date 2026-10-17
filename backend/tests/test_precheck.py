@@ -25,6 +25,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from db_helpers import remove_db  # noqa: E402
+
 from app.core.exceptions import InvalidPeriodError  # noqa: E402
 from app.db.database import init_db  # noqa: E402
 from app.models.evaluation import CAREER_PERIOD, FIELD_CODE_LABELS  # noqa: E402
@@ -106,7 +108,7 @@ def _with_db(test):
             test(conn)
         finally:
             conn.close()
-            os.remove(db_path)
+            remove_db(db_path)
 
     wrapper.__name__ = test.__name__
     return wrapper

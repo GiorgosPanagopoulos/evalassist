@@ -14,6 +14,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from db_helpers import remove_db  # noqa: E402
+
 from app.auth.create_admin import main  # noqa: E402
 from app.auth.passwords import verify_password  # noqa: E402
 
@@ -46,8 +48,7 @@ def _users(db_path: Path) -> list[sqlite3.Row]:
 
 
 def _cleanup(db_path: Path) -> None:
-    if db_path.exists():
-        os.remove(db_path)
+    remove_db(db_path)
     os.rmdir(db_path.parent)
 
 

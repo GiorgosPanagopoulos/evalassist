@@ -16,6 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from auth_helpers import TEST_USERNAME, logged_in_client, login  # noqa: E402
+from db_helpers import remove_db  # noqa: E402
 
 from app.api import deps  # noqa: E402
 from app.api.deps import get_semantic_retriever_factory  # noqa: E402
@@ -90,7 +91,7 @@ def _with_db(enabled: bool):
                 test(db_path)
             finally:
                 app.dependency_overrides.clear()
-                os.remove(db_path)
+                remove_db(db_path)
 
         wrapper.__name__ = test.__name__
         return wrapper

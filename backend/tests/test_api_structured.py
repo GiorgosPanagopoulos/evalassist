@@ -9,11 +9,14 @@ persons x 1 evaluation period seeded):
   - μη έγκυρος συνδυασμός operation/πεδίων -> 422.
   - ανύπαρκτη περίοδος (ή περίοδος άλλου ατόμου) -> 422 με audit, για τα
     period-scoped operations· τα career-wide την αγνοούν.
+  - αν αποτύχει και το audit του error path: 500 χωρίς δεδομένα, και το
+    σφάλμα του audit γίνεται log (μόνο ο τύπος).
 
 Εκτελείται standalone: `python tests/test_api_structured.py`
 """
 
 import json
+import logging
 import os
 import shutil
 import sqlite3
@@ -24,8 +27,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from auth_helpers import logged_in_client  # noqa: E402
+from auth_helpers import BASE_URL, logged_in_client, login, make_user  # noqa: E402
+from db_helpers import remove_db  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 
+from app.api import routes_query  # noqa: E402
 from app.api.main import app  # noqa: E402
 from app.core.config import Settings, get_settings  # noqa: E402
 from app.db import repository  # noqa: E402
@@ -144,7 +150,7 @@ def test_get_scores_scoped_to_person_and_period():
         assert isinstance(body["audit_id"], int)
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_other_person_data_never_leaks():
@@ -164,7 +170,7 @@ def test_other_person_data_never_leaks():
         assert body["result"]["data"]["characterization"] != "ΜΕΤΡΙΟΣ"
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_audit_row_written_with_structured_mode():
@@ -188,7 +194,7 @@ def test_audit_row_written_with_structured_mode():
         assert row["other_period"] is None
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_invalid_operation_field_combo_is_422():
@@ -206,7 +212,7 @@ def test_invalid_operation_field_combo_is_422():
         assert response.status_code == 422
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_get_promotions_table_returns_judged_for_and_career_doc_ids():
@@ -234,7 +240,7 @@ def test_get_promotions_table_returns_judged_for_and_career_doc_ids():
         assert "doc-p1" not in body["result"]["retrieved_doc_ids"]
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_get_promotions_table_other_person_data_never_leaks():
@@ -254,7 +260,7 @@ def test_get_promotions_table_other_person_data_never_leaks():
         assert body["result"]["retrieved_doc_ids"] == []
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_get_promotions_table_writes_audit_row():
@@ -279,7 +285,7 @@ def test_get_promotions_table_writes_audit_row():
         assert row["other_period"] is None
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_get_service_time_table_empty_result_is_200_not_error():
@@ -297,7 +303,7 @@ def test_get_service_time_table_empty_result_is_200_not_error():
         assert response.json()["result"]["data"]["rows"] == []
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_promotions_table_operation_rejects_other_period():
@@ -319,7 +325,7 @@ def test_promotions_table_operation_rejects_other_period():
         assert response.status_code == 422
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_unknown_period_is_422_with_audit_for_period_scoped_operations():
@@ -356,7 +362,7 @@ def test_unknown_period_is_422_with_audit_for_period_scoped_operations():
             assert row["other_period"] == payload.get("other_period"), payload
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_career_wide_operations_ignore_period_validation():
@@ -377,7 +383,7 @@ def test_career_wide_operations_ignore_period_validation():
             assert row["other_period"] is None
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_compare_periods_audits_both_periods():
@@ -415,7 +421,7 @@ def test_compare_periods_audits_both_periods():
         assert row["other_period"] == OTHER_PERIOD
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_multiple_documents_for_same_period_is_400_with_audit_not_limit_1():
@@ -447,7 +453,59 @@ def test_multiple_documents_for_same_period_is_400_with_audit_not_limit_1():
         assert (row["person_id"], row["period"]) == ("p1", PERIOD)
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
+
+
+class _Records(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__(level=logging.DEBUG)
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+def test_failed_error_path_audit_is_logged_and_returns_no_data():
+    db_path = _make_temp_db()
+    original_scores = routes_query.get_scores
+    original_audit = routes_query.write_audit
+    records = _Records()
+    logger = logging.getLogger(routes_query.__name__)
+    try:
+        _override_settings(db_path)
+        make_user(db_path)
+        client = TestClient(app, base_url=BASE_URL, raise_server_exceptions=False)
+        login(client)
+
+        def failure(*args, **kwargs):
+            raise RuntimeError("synthetic failure")
+
+        def locked(*args, **kwargs):
+            raise sqlite3.OperationalError("database is locked")
+
+        routes_query.get_scores = failure
+        routes_query.write_audit = locked
+        logger.addHandler(records)
+
+        response = client.post(
+            "/api/query/structured",
+            json={"person_id": "p1", "period": PERIOD, "operation": "get_scores"},
+        )
+
+        assert response.status_code == 500, response.text
+        assert response.json() == {"detail": "Internal server error"}
+        assert _last_audit_row(db_path) is None
+        errors = [r for r in records.records if r.levelno >= logging.ERROR]
+        assert len(errors) == 1, [r.getMessage() for r in records.records]
+        message = errors[0].getMessage()
+        assert "audit" in message and "OperationalError" in message, message
+        assert "p1" not in message and "database is locked" not in message, message
+    finally:
+        logger.removeHandler(records)
+        routes_query.get_scores = original_scores
+        routes_query.write_audit = original_audit
+        _clear_overrides()
+        remove_db(db_path)
 
 
 def test_real_db_m01253_get_scores_citation_if_present():
@@ -479,7 +537,7 @@ def test_real_db_m01253_get_scores_citation_if_present():
         assert point["page"] == 7
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def run_all():
@@ -497,6 +555,7 @@ def run_all():
         test_career_wide_operations_ignore_period_validation,
         test_compare_periods_audits_both_periods,
         test_multiple_documents_for_same_period_is_400_with_audit_not_limit_1,
+        test_failed_error_path_audit_is_logged_and_returns_no_data,
         test_real_db_m01253_get_scores_citation_if_present,
     ]
     for test in tests:

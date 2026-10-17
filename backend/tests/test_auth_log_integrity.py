@@ -13,6 +13,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from db_helpers import remove_db  # noqa: E402
+
 from app.auth.service import AuthEvent, log_event  # noqa: E402
 from app.db.database import get_connection, init_db  # noqa: E402
 
@@ -49,7 +51,7 @@ def test_update_is_blocked():
     try:
         _expect_abort(db_path, "UPDATE auth_log SET event = 'login_ok'", "UPDATE is not allowed")
     finally:
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_delete_is_blocked():
@@ -57,7 +59,7 @@ def test_delete_is_blocked():
     try:
         _expect_abort(db_path, "DELETE FROM auth_log", "DELETE is not allowed")
     finally:
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_row_survives_blocked_update_and_delete():
@@ -72,7 +74,7 @@ def test_row_survives_blocked_update_and_delete():
             conn.close()
         assert rows == [("login_fail", "synthetic")]
     finally:
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_init_db_twice_keeps_triggers():
@@ -81,7 +83,7 @@ def test_init_db_twice_keeps_triggers():
         init_db(db_path)
         _expect_abort(db_path, "DELETE FROM auth_log", "DELETE is not allowed")
     finally:
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def run_all():
