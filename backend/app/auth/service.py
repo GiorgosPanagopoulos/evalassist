@@ -41,6 +41,7 @@ class AuthEvent(StrEnum):
     ADMIN_DISABLE_USER = "admin_disable_user"
     ADMIN_RESET_PASSWORD = "admin_reset_password"
     ADMIN_BOOTSTRAP = "admin_bootstrap"
+    ADMIN_ACTION_DENIED = "admin_action_denied"
 
 
 class InvalidCredentialsError(Exception):
@@ -58,6 +59,11 @@ class UsernameError(Exception):
 
 class LastAdminError(Exception):
     """Απόπειρα απενεργοποίησης του τελευταίου ενεργού admin."""
+
+
+class AdminProtectedError(Exception):
+    """Ενέργεια του admin API με στόχο λογαριασμό admin. Οι admins
+    δημιουργούνται και διαχειρίζονται μόνο από το CLI (create_admin)."""
 
 
 @dataclass(frozen=True)
@@ -316,7 +322,21 @@ def create_user(
 def create_user_with_temp_password(
     conn: sqlite3.Connection, username: str, role: str, actor_user_id: int, now: datetime
 ) -> tuple[int, str, str]:
-    """Επιστρέφει (id, κανονικοποιημένο username, προσωρινός κωδικός)."""
+    """Επιστρέφει (id, κανονικοποιημένο username, προσωρινός κωδικός).
+
+    Είναι η διαδρομή του admin API: εδώ επιτρέπεται μόνο role='user'. Το CLI
+    create_admin καλεί απευθείας το create_user και δεν περνά από εδώ."""
+    if role == "admin":
+        log_event(
+            conn,
+            now,
+            AuthEvent.ADMIN_ACTION_DENIED,
+            username=normalize_username(username),
+            actor_user_id=actor_user_id,
+            detail="create_admin",
+        )
+        conn.commit()
+        raise AdminProtectedError("Λογαριασμοί admin δημιουργούνται μόνο από το CLI.")
     temp = generate_temp_password()
     user_id = create_user(
         conn, username, role, temp, True, now, actor_user_id, AuthEvent.ADMIN_CREATE_USER
@@ -349,16 +369,38 @@ def _get_user(conn: sqlite3.Connection, user_id: int) -> sqlite3.Row:
     return row
 
 
+def _deny_admin_target(
+    conn: sqlite3.Connection, now: datetime, target: sqlite3.Row, actor_user_id: int, detail: str
+) -> None:
+    """Καταγράφει την απορριφθείσα ενέργεια σε admin στόχο και σηκώνει
+    AdminProtectedError. Καλείται μετά το rollback της αποτυχημένης αλλαγής."""
+    log_event(
+        conn,
+        now,
+        AuthEvent.ADMIN_ACTION_DENIED,
+        username=target["username"],
+        actor_user_id=actor_user_id,
+        target_user_id=target["id"],
+        detail=detail,
+    )
+    conn.commit()
+    raise AdminProtectedError("Λογαριασμοί admin διαχειρίζονται μόνο από το CLI.")
+
+
 def disable_user(
     conn: sqlite3.Connection, target_user_id: int, actor_user_id: int, now: datetime
 ) -> None:
     target = _get_user(conn, target_user_id)
-    # Ένα statement: ο έλεγχος "τελευταίος ενεργός admin" και η αλλαγή γίνονται
-    # ατομικά, χωρίς παράθυρο ανάμεσα σε SELECT και UPDATE.
+    # Ένα statement: ο έλεγχος ρόλου, ο έλεγχος "τελευταίος ενεργός admin" και
+    # η αλλαγή γίνονται ατομικά, χωρίς παράθυρο ανάμεσα σε SELECT και UPDATE.
+    # Ο φραγμός τελευταίου admin σήμερα δεν είναι προσβάσιμος μέσω API (το
+    # AND role = 'user' απορρίπτει κάθε admin στόχο). Μένει ως backstop, αν
+    # κάποτε αφαιρεθεί το AND role = 'user'.
     cursor = conn.execute(
         """
         UPDATE users SET is_active = 0, updated_at = ?
         WHERE id = ?
+          AND role = 'user'
           AND NOT (role = 'admin' AND is_active = 1
                    AND (SELECT COUNT(*) FROM users WHERE role = 'admin' AND is_active = 1) <= 1)
         """,
@@ -366,6 +408,8 @@ def disable_user(
     )
     if cursor.rowcount == 0:
         conn.rollback()
+        if target["role"] == "admin":
+            _deny_admin_target(conn, now, target, actor_user_id, "disable_admin")
         raise LastAdminError("Ο τελευταίος ενεργός admin δεν μπορεί να απενεργοποιηθεί.")
     conn.execute("DELETE FROM sessions WHERE user_id = ?", (target_user_id,))
     log_event(
@@ -384,14 +428,17 @@ def reset_password(
 ) -> str:
     target = _get_user(conn, target_user_id)
     temp = generate_temp_password()
-    conn.execute(
+    cursor = conn.execute(
         """
         UPDATE users
         SET password_hash = ?, must_change_pw = 1, failed_attempts = 0, locked_until = NULL, updated_at = ?
-        WHERE id = ?
+        WHERE id = ? AND role = 'user'
         """,
         (hash_password(temp), iso(now), target_user_id),
     )
+    if cursor.rowcount == 0:
+        conn.rollback()
+        _deny_admin_target(conn, now, target, actor_user_id, "reset_admin")
     conn.execute("DELETE FROM sessions WHERE user_id = ?", (target_user_id,))
     log_event(
         conn,

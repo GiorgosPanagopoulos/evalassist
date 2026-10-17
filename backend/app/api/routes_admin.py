@@ -36,6 +36,8 @@ def create_user(
         user_id, username, temp = service.create_user_with_temp_password(
             conn, body.username, body.role, admin.id, clock()
         )
+    except service.AdminProtectedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     except service.UsernameError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     response.headers.update(_NO_STORE)
@@ -51,6 +53,8 @@ def disable_user(
 ) -> Response:
     try:
         service.disable_user(conn, user_id, admin.id, clock())
+    except service.AdminProtectedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     except service.LastAdminError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -64,6 +68,9 @@ def reset_password(
     conn: sqlite3.Connection = Depends(get_db),
     clock: Clock = Depends(get_clock),
 ) -> TempPasswordResponse:
-    temp = service.reset_password(conn, user_id, admin.id, clock())
+    try:
+        temp = service.reset_password(conn, user_id, admin.id, clock())
+    except service.AdminProtectedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     response.headers.update(_NO_STORE)
     return TempPasswordResponse(temp_password=temp)
