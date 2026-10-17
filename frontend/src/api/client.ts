@@ -109,8 +109,10 @@ export class ApiClient {
     return this.request<void>('api/auth/logout', { method: 'POST' })
   }
 
-  me(): Promise<Me> {
-    return this.request<Me>('api/auth/me')
+  // ignoreUnauthorized: ο έλεγχος αμέσως μετά το login, όπου ένα 401 σημαίνει
+  // ότι ο browser δεν κράτησε το cookie, όχι ληγμένο session.
+  me(options: { ignoreUnauthorized?: boolean } = {}): Promise<Me> {
+    return this.request<Me>('api/auth/me', options)
   }
 
   changePassword(currentPassword: string, newPassword: string): Promise<void> {
