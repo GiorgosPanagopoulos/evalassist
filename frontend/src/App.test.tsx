@@ -40,10 +40,15 @@ const COMMON: Routes = {
 
 describe('App auth flow', () => {
   it('shows the login page when there is no session, then the app after login', async () => {
+    // Το cookie κρατιέται: το /me δίνει 401 πριν το login και 200 μετά.
+    let session = false
     const { api, fetchFn } = makeApi({
       ...COMMON,
-      'GET api/auth/me': [401, { detail: 'Απαιτείται σύνδεση.' }],
-      'POST api/auth/login': [200, USER],
+      'GET api/auth/me': () => (session ? [200, USER] : [401, { detail: 'Απαιτείται σύνδεση.' }]),
+      'POST api/auth/login': () => {
+        session = true
+        return [200, USER]
+      },
     })
     const user = userEvent.setup()
     render(<App api={api} />)
@@ -59,6 +64,30 @@ describe('App auth flow', () => {
     const firstLogin = fetchFn.mock.calls.findIndex(([url]) => url === 'api/auth/login')
     const firstData = fetchFn.mock.calls.findIndex(([url]) => url === 'api/persons')
     expect(firstData).toBeGreaterThan(firstLogin)
+  })
+
+  it('login 200 but the cookie was not kept (http): explains instead of silently returning to login', async () => {
+    const { api, fetchFn } = makeApi({
+      ...COMMON,
+      'GET api/auth/me': [401, { detail: 'Απαιτείται σύνδεση.' }],
+      'POST api/auth/login': [200, USER],
+    })
+    const user = userEvent.setup()
+    render(<App api={api} />)
+
+    await user.type(await screen.findByLabelText('Όνομα χρήστη'), 'alice')
+    await user.type(screen.getByLabelText('Κωδικός'), 'synthetic-pass-0001')
+    await user.click(screen.getByRole('button', { name: 'Σύνδεση' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Η συνεδρία δεν αποθηκεύτηκε. Βεβαιωθείτε ότι η πρόσβαση γίνεται μέσω HTTPS.',
+    )
+    expect(screen.getByRole('form', { name: 'Σύνδεση' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Κωδικός')).toHaveValue('')
+    // Ο έλεγχος έγινε (δεύτερο /me) και κανένα αίτημα δεδομένων δεν ακολούθησε.
+    const urls = fetchFn.mock.calls.map(([url]) => url)
+    expect(urls.filter((url) => url === 'api/auth/me')).toHaveLength(2)
+    expect(urls).not.toContain('api/persons')
   })
 
   it('shows the backend error on wrong credentials and stays on the login page', async () => {

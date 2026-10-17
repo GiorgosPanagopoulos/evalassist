@@ -241,3 +241,18 @@ describe('ApiClient.documentFile', () => {
     expect(onUnauthorized).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('ApiClient.me', () => {
+  it('ignoreUnauthorized: a 401 does not call the unauthorized handler', async () => {
+    const client = new ApiClient('', fakeFetch(401, { detail: 'Απαιτείται σύνδεση.' }) as unknown as typeof fetch)
+    const onUnauthorized = vi.fn()
+    client.setUnauthorizedHandler(onUnauthorized)
+
+    await expect(client.me({ ignoreUnauthorized: true })).rejects.toMatchObject({ status: 401 })
+    expect(onUnauthorized).not.toHaveBeenCalled()
+
+    // Χωρίς την επιλογή, όπως πριν: ο handler καλείται.
+    await expect(client.me()).rejects.toMatchObject({ status: 401 })
+    expect(onUnauthorized).toHaveBeenCalledTimes(1)
+  })
+})
