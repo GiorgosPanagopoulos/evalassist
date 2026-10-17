@@ -56,7 +56,8 @@ export class ApiClient {
     return this.baseUrl ? `${this.baseUrl}/${path}` : path
   }
 
-  private async request<T>(path: string, init?: RequestOptions): Promise<T> {
+  // Fetch και κοινός χειρισμός σφαλμάτων (detail, 503, 401) για όλα τα requests.
+  private async send(path: string, init?: RequestOptions): Promise<Response> {
     const { ignoreUnauthorized, ...fetchInit } = init ?? {}
     const response = await this.fetchFn(this.url(path), {
       ...fetchInit,
@@ -83,7 +84,11 @@ export class ApiClient {
       }
       throw new ApiError(response.status, detail)
     }
+    return response
+  }
 
+  private async request<T>(path: string, init?: RequestOptions): Promise<T> {
+    const response = await this.send(path, init)
     if (response.status === 204) {
       return undefined as T
     }
@@ -164,6 +169,16 @@ export class ApiClient {
 
   getTimeline(personId: string): Promise<TimelineResponse> {
     return this.request<TimelineResponse>(`api/person/${encodeURIComponent(personId)}/timeline`)
+  }
+
+  // Το PDF ενός εγγράφου. Κάθε κλήση είναι ένα request και μία γραμμή audit
+  // στον server: χωρίς cache του browser.
+  async documentFile(personId: string, docId: string, period: string): Promise<Blob> {
+    const path =
+      `api/person/${encodeURIComponent(personId)}/documents/${encodeURIComponent(docId)}/file` +
+      `?period=${encodeURIComponent(period)}`
+    const response = await this.send(path, { cache: 'no-store', headers: { Accept: 'application/pdf' } })
+    return response.blob()
   }
 
   getHealth(): Promise<HealthResponse> {

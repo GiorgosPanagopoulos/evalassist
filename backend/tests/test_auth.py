@@ -131,11 +131,33 @@ def test_successful_login_sets_hardened_cookie():
             "username": "alice",
             "role": "user",
             "must_change_pw": False,
-            "features": {"semantic_enabled": False},
+            "features": {"semantic_enabled": False, "document_file_enabled": False},
         }
         set_cookie = response.headers["set-cookie"].lower()
         for flag in ("httponly", "secure", "samesite=strict", "path=/", "max-age=28800"):
             assert flag in set_cookie, (flag, set_cookie)
+
+
+def test_document_file_flag_only_with_existing_docs_root_dir():
+    with _env() as (db_path, _):
+        make_user(db_path, "alice")
+        client = new_client(app)
+        assert _post_login(client, "alice", TEST_PASSWORD).status_code == 200
+        with tempfile.TemporaryDirectory() as tmp:
+            not_a_dir = Path(tmp) / "file.pdf"
+            not_a_dir.write_bytes(b"%PDF-1.4\n")
+            for docs_root, expected in (
+                (None, False),
+                (Path(tmp), True),
+                (Path(tmp) / "missing", False),
+                (not_a_dir, False),
+            ):
+                settings = Settings(_env_file=None, DB_PATH=db_path, DOCS_ROOT=docs_root)
+                app.dependency_overrides[get_settings] = lambda settings=settings: settings
+                features = client.get("/api/auth/me").json()["features"]
+                assert features["document_file_enabled"] is expected, (docs_root, features)
+                # Το δημόσιο health δεν δίνει flags: μόνο το /me.
+                assert set(client.get("/api/health").json()) == {"status", "ollama_reachable"}
 
 
 def test_username_is_case_insensitive():
@@ -612,6 +634,7 @@ def run_all():
         test_wrong_password_and_unknown_user_same_status_and_body,
         test_unknown_username_is_never_stored,
         test_successful_login_sets_hardened_cookie,
+        test_document_file_flag_only_with_existing_docs_root_dir,
         test_username_is_case_insensitive,
         test_lockout_after_5_failures_and_unlock_after_expiry,
         test_correct_password_while_locked_is_401_same_body_and_changes_nothing,

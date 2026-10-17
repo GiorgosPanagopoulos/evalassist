@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { TimelinePanel } from './TimelinePanel'
 import type { TimelinePoint } from '../api/types'
+import { ApiError } from '../api/client'
 
 const SECTION = 'ΣΥΝΟΛΙΚΗ ΕΜΦΑΝΙΣΗ - ΧΑΡΑΚΤΗΡΙΣΜΟΣ'
 
@@ -68,5 +69,122 @@ describe('TimelinePanel', () => {
     const line = await screen.findByTestId('selected-citation')
     expect(line).toHaveClass('truncate')
     expect(line).toHaveAttribute('title', `doc-1 · σελ. 3 · ${SECTION}`)
+  })
+})
+
+describe('TimelinePanel: άνοιγμα PDF', () => {
+  const PERSON = { person_id: 'Μ-01253', name: 'Συνθετικός Α' }
+  const P2023 = '2023-01-01..2023-12-31'
+  const P2024 = '2024-01-01..2024-06-30'
+  let tab: { opener: unknown; document: { title: string; body: { textContent: string } }; location: { href: string }; close: ReturnType<typeof vi.fn> }
+
+  beforeEach(() => {
+    tab = { opener: {}, document: { title: '', body: { textContent: '' } }, location: { href: '' }, close: vi.fn() }
+    vi.spyOn(window, 'open').mockImplementation(() => tab as unknown as Window)
+    URL.createObjectURL = vi.fn(() => 'blob:http://10.0.0.5/abc')
+    URL.revokeObjectURL = vi.fn()
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function setup(options: { documentFile?: boolean; withApi?: boolean; file?: () => Promise<Blob> } = {}) {
+    const { documentFile = true, withApi = true } = options
+    const file = vi.fn(options.file ?? (async () => new Blob(['%PDF-1.4'], { type: 'application/pdf' })))
+    const api = {
+      getTimeline: vi.fn(async () => ({
+        result: { person_id: PERSON.person_id, points: [ea(P2023, 100), ea(P2024, 90)], retrieved_doc_ids: ['doc-1'] },
+        audit_id: 1,
+      })),
+      ...(withApi ? { documentFile: file } : {}),
+    }
+    render(<TimelinePanel api={api} person={PERSON} flags={{ documentFile, export: false }} />)
+    return { file, user: userEvent.setup() }
+  }
+
+  const openButtons = () => screen.queryAllByRole('button', { name: /Άνοιγμα PDF/ })
+
+  it('flag false: no open buttons and no request', async () => {
+    const { file } = setup({ documentFile: false })
+    await screen.findByRole('list', { name: 'Λίστα περιόδων' })
+    expect(openButtons()).toEqual([])
+    expect(screen.queryByTestId('document-message')).toBeNull()
+    expect(file).not.toHaveBeenCalled()
+  })
+
+  it('flag true but an api without documentFile: no open buttons', async () => {
+    setup({ withApi: false })
+    await screen.findByRole('list', { name: 'Λίστα περιόδων' })
+    expect(openButtons()).toEqual([])
+  })
+
+  it('flag true: buttons per period and for the selection, no prefetch', async () => {
+    const { file } = setup()
+    await screen.findByRole('list', { name: 'Λίστα περιόδων' })
+    // Δύο περίοδοι + το κύριο κουμπί της επιλεγμένης.
+    expect(openButtons()).toHaveLength(3)
+    expect(screen.getByRole('button', { name: 'Άνοιγμα PDF στη σελίδα 3' })).toBeInTheDocument()
+    expect(file).not.toHaveBeenCalled()
+  })
+
+  it('each click is one request with person, doc and period, and opens the page', async () => {
+    const { file, user } = setup()
+    const main = await screen.findByRole('button', { name: 'Άνοιγμα PDF στη σελίδα 3' })
+
+    await user.click(main)
+    expect(file).toHaveBeenCalledTimes(1)
+    // Η πιο πρόσφατη περίοδος είναι επιλεγμένη by default.
+    expect(file).toHaveBeenCalledWith('Μ-01253', 'doc-1', P2024)
+    expect(tab.location.href).toBe('blob:http://10.0.0.5/abc#page=3')
+
+    // Χωρίς cache: δεύτερο κλικ, δεύτερο request.
+    await user.click(main)
+    expect(file).toHaveBeenCalledTimes(2)
+
+    // Το εικονίδιο μιας γραμμής ανοίγει τη δική της περίοδο.
+    await user.click(screen.getByRole('button', { name: /^Άνοιγμα PDF 2023.*σελίδα 3$/ }))
+    expect(file).toHaveBeenLastCalledWith('Μ-01253', 'doc-1', P2023)
+    expect(file).toHaveBeenCalledTimes(3)
+  })
+
+  it('while a request is in flight, a second click sends nothing', async () => {
+    let resolve: (blob: Blob) => void = () => {}
+    const { file, user } = setup({ file: () => new Promise<Blob>((r) => (resolve = r)) })
+    const main = await screen.findByRole('button', { name: 'Άνοιγμα PDF στη σελίδα 3' })
+
+    await user.click(main)
+    expect(main).toBeDisabled()
+    await user.click(main)
+    expect(file).toHaveBeenCalledTimes(1)
+
+    resolve(new Blob(['%PDF-1.4']))
+    await waitFor(() => expect(main).toBeEnabled())
+  })
+
+  it.each([
+    ['404', () => Promise.reject(new ApiError(404, 'Δεν βρέθηκε το έγγραφο.'))],
+    ['500', () => Promise.reject(new ApiError(500, 'Internal server error'))],
+    ['network error', () => Promise.reject(new TypeError('Failed to fetch'))],
+  ])('%s: neutral message, no technical reason, tab closed', async (_, failure) => {
+    const { user } = setup({ file: failure })
+    await user.click(await screen.findByRole('button', { name: 'Άνοιγμα PDF στη σελίδα 3' }))
+
+    expect(await screen.findByText('Το έγγραφο δεν είναι διαθέσιμο')).toBeInTheDocument()
+    expect(screen.getByTestId('document-message')).toHaveAttribute('aria-live', 'polite')
+    expect(document.body.textContent).not.toMatch(/Δεν βρέθηκε|Internal|Failed|404|500/)
+    expect(tab.close).toHaveBeenCalledTimes(1)
+
+    // Νέα επιλογή περιόδου: το μήνυμα σβήνει.
+    await user.click(screen.getByRole('button', { name: /^2023/ }))
+    expect(screen.queryByText('Το έγγραφο δεν είναι διαθέσιμο')).toBeNull()
+  })
+
+  it('blocked popup: asks to allow popups and sends no request', async () => {
+    vi.mocked(window.open).mockImplementation(() => null)
+    const { file, user } = setup()
+    await user.click(await screen.findByRole('button', { name: 'Άνοιγμα PDF στη σελίδα 3' }))
+
+    expect(await screen.findByText('Επιτρέψτε τα αναδυόμενα παράθυρα για να ανοίξει το έγγραφο')).toBeInTheDocument()
+    expect(file).not.toHaveBeenCalled()
   })
 })

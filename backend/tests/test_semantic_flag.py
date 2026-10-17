@@ -190,9 +190,11 @@ def test_enabled_calls_factory_and_answers(db_path):
 
 def _check_features(db_path: Path, expected: bool) -> None:
     client = logged_in_client(app, db_path)
-    assert client.get("/api/auth/me").json()["features"] == {"semantic_enabled": expected}
+    # Χωρίς DOCS_ROOT το άνοιγμα PDF είναι πάντα κλειστό, ανεξάρτητα από το semantic.
+    features = {"semantic_enabled": expected, "document_file_enabled": False}
+    assert client.get("/api/auth/me").json()["features"] == features
     # Νέο login στον ίδιο client: το σώμα του login δηλώνει τα ίδια features.
-    assert login(client, TEST_USERNAME).json()["features"] == {"semantic_enabled": expected}
+    assert login(client, TEST_USERNAME).json()["features"] == features
 
 
 @_with_db(enabled=False)

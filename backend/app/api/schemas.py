@@ -76,6 +76,9 @@ class Features(BaseModel):
     """Δυνατότητες της εγκατάστασης που το frontend χρειάζεται να ξέρει."""
 
     semantic_enabled: bool
+    # Άνοιγμα PDF: μόνο αν το DOCS_ROOT είναι ρυθμισμένο ΚΑΙ υπάρχει ως φάκελος,
+    # ώστε ένα λάθος path να κρύβει το κουμπί αντί να δίνει 404 σε κάθε κλικ.
+    document_file_enabled: bool
 
 
 class MeResponse(BaseModel):

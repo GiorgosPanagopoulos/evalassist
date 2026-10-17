@@ -192,3 +192,52 @@ describe('ApiClient', () => {
     expect(fetchFn.mock.calls[0][0]).toBe(`${BASE_URL}/api/auth/logout`)
   })
 })
+
+describe('ApiClient.documentFile', () => {
+  function pdfFetch(status: number) {
+    return vi.fn(async (_url: string, _init?: RequestInit) =>
+      status === 200
+        ? new Response('%PDF-1.4 synthetic', { status, headers: { 'Content-Type': 'application/pdf' } })
+        : new Response(JSON.stringify({ detail: 'Δεν βρέθηκε το έγγραφο.' }), {
+            status,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+    )
+  }
+
+  it('GETs the file with encoded person, doc and period, no-store, same-origin cookie', async () => {
+    const fetchFn = pdfFetch(200)
+    const client = new ApiClient('', fetchFn as unknown as typeof fetch)
+
+    const blob = await client.documentFile('Μ-01253', 'doc/1', '2012-09-14..2012-12-31')
+
+    expect(await blob.text()).toBe('%PDF-1.4 synthetic')
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchFn.mock.calls[0]
+    expect(url).toBe(
+      `api/person/${encodeURIComponent('Μ-01253')}/documents/doc%2F1/file?period=2012-09-14..2012-12-31`,
+    )
+    // Το fragment της σελίδας δεν φτάνει ποτέ στον server.
+    expect(url).not.toContain('#')
+    expect(init?.cache).toBe('no-store')
+    expect(init?.credentials).toBe('same-origin')
+  })
+
+  it('404 throws ApiError(404) without calling the unauthorized handler', async () => {
+    const client = new ApiClient('', pdfFetch(404) as unknown as typeof fetch)
+    const onUnauthorized = vi.fn()
+    client.setUnauthorizedHandler(onUnauthorized)
+
+    await expect(client.documentFile('p1', 'd1', 'x')).rejects.toMatchObject({ status: 404 })
+    expect(onUnauthorized).not.toHaveBeenCalled()
+  })
+
+  it('401 calls the unauthorized handler', async () => {
+    const client = new ApiClient('', pdfFetch(401) as unknown as typeof fetch)
+    const onUnauthorized = vi.fn()
+    client.setUnauthorizedHandler(onUnauthorized)
+
+    await expect(client.documentFile('p1', 'd1', 'x')).rejects.toBeInstanceOf(ApiError)
+    expect(onUnauthorized).toHaveBeenCalledTimes(1)
+  })
+})

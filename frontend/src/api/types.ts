@@ -118,8 +118,10 @@ export type UserRole = 'admin' | 'user'
 
 export interface Features {
   semantic_enabled: boolean
-  // UI flags for endpoints that do not exist yet. Absent means false.
+  // Από τον server: true μόνο όταν το DOCS_ROOT είναι ρυθμισμένος φάκελος.
+  // Optional ώστε ένας παλαιότερος server να σημαίνει false.
   document_file_enabled?: boolean
+  // UI flags for endpoints that do not exist yet. Absent means false.
   review_flags_enabled?: boolean
   audit_history_enabled?: boolean
   export_enabled?: boolean

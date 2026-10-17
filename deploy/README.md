@@ -101,7 +101,8 @@ app διαβάζει μόνο το `backend/.env` και μεταβλητές π
 - `DB_PATH`: absolute path της βάσης του βήματος 5.
 - `DOCS_ROOT`: absolute path του φακέλου των PDF (βήμα 5α). Χωρίς αυτό, το
   άνοιγμα PDF απαντά πάντα 404.
-- `COOKIE_SECURE=true`: το session cookie στέλνεται μόνο σε HTTPS.
+- `COOKIE_SECURE=true`: το session cookie στέλνεται μόνο σε HTTPS. Μένει `true`,
+  βλ. «HTTPS και Apache reverse proxy».
 - `COOKIE_PATH`: εξαρτάται από το portal, βλ. την αντίστοιχη ενότητα.
 
 **Όταν ανοίξει το semantic (όχι σε αυτό το deploy):** το `HF_HUB_OFFLINE=1`
@@ -296,17 +297,81 @@ cd <CHANGEME_APP_DIR>/backend
    Και τα δύο πρέπει να δώσουν `0`. Το access log είναι κλειστό από τον κώδικα
    (`ACCESS_LOG=false`) και οι εξαιρέσεις γράφουν μόνο τύπο και αρχείο:γραμμή.
 
-## Portal / reverse proxy
+## HTTPS και Apache reverse proxy
 
-*Συμπληρώνεται όταν οριστεί το portal.* Ό,τι χρειάζεται να καλύψει:
+Οι clients (Google Chrome σε Windows) μπαίνουν με IP σε κλειστό LAN, μέσω
+Apache σε Linux, που προωθεί στο uvicorn του βήματος 8.
 
-- HTTPS προς τον browser. Το cookie είναι `Secure` και χωρίς HTTPS το login
-  δεν κρατά session.
-- Προώθηση του `https://<CHANGEME_PORTAL_HOST>/<CHANGEME_PREFIX>/` στο
-  `http://127.0.0.1:<CHANGEME_PORT>/`, **με αφαίρεση του prefix**. Το frontend
-  χρησιμοποιεί σχετικά paths και δουλεύει κάτω από οποιοδήποτε prefix.
+### Η πρόσβαση ΠΡΕΠΕΙ να είναι HTTPS
+
+Το session cookie είναι `Secure` (`COOKIE_SECURE=true`), μαζί με `HttpOnly`
+και `SameSite=Strict`. Σε `http://<IP>` το Chrome **δεν το αποθηκεύει**: το
+login απαντά 200, αλλά το επόμενο request δίνει 401 και ο χρήστης γυρίζει
+στη σελίδα σύνδεσης χωρίς κανένα μήνυμα σφάλματος. Ελέγχθηκε σε Chrome 155:
+από `http://<IP>` κανένα cookie δεν αποθηκεύτηκε, ενώ από `http://localhost`
+το login λειτουργεί, γιατί το Chrome θεωρεί το localhost ασφαλές. Γι' αυτό ένα
+deploy που δουλεύει στο localhost του server μπορεί να μη δουλεύει από τους
+clients.
+
+- Το `COOKIE_SECURE` μένει `true` στην παραγωγή. **Δεν** γίνεται `false` για
+  να «δουλέψει» το http: το cookie του session θα ταξίδευε τότε χωρίς
+  κρυπτογράφηση στο LAN.
+- Πιστοποιητικό από **εσωτερική CA** (προτιμότερο) ή **self-signed**, και
+  στις δύο περιπτώσεις εγκατεστημένο στους clients: στα Windows στο
+  «Trusted Root Certification Authorities» του μηχανήματος, ιδανικά με GPO.
+  Το Chrome στα Windows χρησιμοποιεί αυτό το store.
+- Η πρόσβαση γίνεται με IP, άρα το πιστοποιητικό χρειάζεται την IP στο
+  **subjectAltName** (`IP:<CHANGEME_SERVER_IP>`). Το Chrome αγνοεί το CN·
+  χωρίς IP στο SAN δείχνει `NET::ERR_CERT_COMMON_NAME_INVALID`.
+- Το port 80 μόνο ανακατευθύνει στο 443.
+
+### Ρύθμιση Apache
+
+Modules: `ssl`, `proxy`, `proxy_http`. Παράδειγμα με την εφαρμογή κάτω από
+`/<CHANGEME_PREFIX>/`:
+
+```apache
+<VirtualHost *:80>
+    ServerName <CHANGEME_SERVER_IP>
+    Redirect permanent / https://<CHANGEME_SERVER_IP>/
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName <CHANGEME_SERVER_IP>
+    SSLEngine on
+    SSLCertificateFile    <CHANGEME_CERT_FILE>
+    SSLCertificateKeyFile <CHANGEME_CERT_KEY>
+
+    # Το prefix αφαιρείται: το app σερβίρει στη ρίζα του uvicorn.
+    ProxyPass        /<CHANGEME_PREFIX>/ http://127.0.0.1:<CHANGEME_PORT>/
+    ProxyPassReverse /<CHANGEME_PREFIX>/ http://127.0.0.1:<CHANGEME_PORT>/
+</VirtualHost>
+```
+
 - `COOKIE_PATH` στο `backend/.env`: `/<CHANGEME_PREFIX>` αν η εφαρμογή είναι
-  κάτω από prefix, `/` αν είναι στη ρίζα του host.
+  κάτω από prefix, `/` αν είναι στη ρίζα. Όχι επιπλέον
+  `ProxyPassReverseCookiePath` στον Apache: το path το ορίζει ήδη το app.
 - Frontend και API στο ίδιο origin. Το app δεν έχει CORS και δεν το
-  χρειάζεται.
-- Χωρίς cache στο `/<CHANGEME_PREFIX>/api/`.
+  χρειάζεται. Το frontend χρησιμοποιεί σχετικά paths και δουλεύει κάτω από
+  οποιοδήποτε prefix.
+- Το uvicorn ακούει μόνο στο `127.0.0.1`: οι clients φτάνουν μόνο μέσω Apache.
+
+### Ο Apache δεν κάνει cache και δεν αλλάζει headers
+
+Το `/<CHANGEME_PREFIX>/api/` περνά από τον Apache αυτούσιο. Αυτό ισχύει
+ιδιαίτερα για το `.../documents/{doc_id}/file`: κάθε άνοιγμα PDF πρέπει να
+φτάνει στο app, ώστε να γράφεται η γραμμή του στο audit, και το PDF δεν
+πρέπει να μένει σε cache κανενός μηχανήματος.
+
+- Κανένα `mod_cache` / `mod_cache_disk` για το `/api/`. Αν είναι φορτωμένα
+  για άλλες εφαρμογές του server: `CacheDisable /<CHANGEME_PREFIX>/api/`.
+- Κανένα `Header set`, `Header unset`, `Header edit` ή `ExpiresActive` που
+  επηρεάζει το `/api/`. Οι headers του app πρέπει να φτάνουν όπως είναι:
+  - `Cache-Control: no-store`
+  - `X-Content-Type-Options: nosniff`
+  - `Content-Disposition: inline; filename="<doc_id>.pdf"`
+  - `Content-Type: application/pdf`
+- Έλεγχος από client, στο Chrome: DevTools → Network, άνοιγμα ενός PDF, και
+  στο request `.../file` τα Response Headers πρέπει να είναι ακριβώς τα
+  παραπάνω, χωρίς `Age` ή `X-Cache`. Δεύτερο άνοιγμα του ίδιου PDF: νέο
+  request με status 200, όχι «(from disk cache)».
