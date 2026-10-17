@@ -26,6 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api import (
     routes_admin,
     routes_auth,
+    routes_documents,
     routes_health,
     routes_meta,
     routes_query,
@@ -92,6 +93,9 @@ def create_app() -> FastAPI:
     app.include_router(routes_meta.router, prefix="/api", tags=["meta"], dependencies=authenticated)
     app.include_router(
         routes_timeline.router, prefix="/api", tags=["timeline"], dependencies=authenticated
+    )
+    app.include_router(
+        routes_documents.router, prefix="/api", tags=["documents"], dependencies=authenticated
     )
 
     @app.exception_handler(NotFoundError)
