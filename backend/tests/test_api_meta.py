@@ -16,6 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from auth_helpers import logged_in_client, new_client  # noqa: E402
+from db_helpers import remove_db  # noqa: E402
 
 from app.api import routes_health  # noqa: E402
 from app.api.main import app  # noqa: E402
@@ -90,7 +91,7 @@ def test_list_persons():
         assert person_ids == {"p1", "p2"}
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_list_periods_for_person():
@@ -105,7 +106,7 @@ def test_list_periods_for_person():
         assert response.json() == [_entry(2024).period, _entry(2025).period]
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 class _FakeHttpx:
@@ -135,7 +136,7 @@ def _health_with_fake_httpx(fake: _FakeHttpx, semantic_enabled: bool) -> dict:
     finally:
         routes_health.httpx = original
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_health_with_semantic_disabled_never_calls_ollama():
@@ -167,7 +168,7 @@ def test_health_reports_ollama_unreachable_on_dead_port():
         assert body["ollama_reachable"] is False
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def run_all():

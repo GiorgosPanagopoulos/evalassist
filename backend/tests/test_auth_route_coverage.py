@@ -16,6 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from auth_helpers import new_client  # noqa: E402
+from db_helpers import remove_db  # noqa: E402
 
 from app.api.main import app  # noqa: E402
 from app.core.config import Settings, get_settings  # noqa: E402
@@ -50,7 +51,7 @@ def _with_temp_db(test):
             test()
         finally:
             app.dependency_overrides.clear()
-            os.remove(db_path)
+            remove_db(db_path)
 
     wrapper.__name__ = test.__name__
     return wrapper

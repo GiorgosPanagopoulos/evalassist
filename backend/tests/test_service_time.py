@@ -17,6 +17,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from db_helpers import remove_db  # noqa: E402
+
 import app.ingestion.service_time as service_time  # noqa: E402
 from app.db import repository  # noqa: E402
 from app.db.database import init_db  # noqa: E402
@@ -150,7 +152,7 @@ def test_replace_service_time_twice_same_row_count():
         assert count_first == 4
         assert count_second == 4
     finally:
-        db_path.unlink(missing_ok=True)
+        remove_db(db_path)
 
 
 def test_row_index_continuous_and_ordered():
@@ -178,7 +180,7 @@ def test_row_index_continuous_and_ordered():
             "Αος ΜΗΧΑΝΙΚΟΣ",
         ]
     finally:
-        db_path.unlink(missing_ok=True)
+        remove_db(db_path)
 
 
 def test_greek_test_data_uses_real_greek_codepoints_not_latin_lookalikes():
@@ -216,7 +218,7 @@ def test_get_service_time_reader_orders_by_row_index():
         assert result[0]["months"] == 0
         assert result[0]["days"] == 10
     finally:
-        db_path.unlink(missing_ok=True)
+        remove_db(db_path)
 
 
 def test_get_service_time_reader_empty_for_unknown_person():
@@ -228,7 +230,7 @@ def test_get_service_time_reader_empty_for_unknown_person():
         conn.close()
         assert result == []
     finally:
-        db_path.unlink(missing_ok=True)
+        remove_db(db_path)
 
 
 def run_all():

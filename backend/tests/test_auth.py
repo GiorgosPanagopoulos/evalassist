@@ -17,6 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from auth_helpers import TEST_PASSWORD, FakeClock, login, make_user, new_client  # noqa: E402
+from db_helpers import remove_db  # noqa: E402
 
 from app.api.main import app  # noqa: E402
 from app.auth.deps import SESSION_COOKIE, get_clock  # noqa: E402
@@ -42,7 +43,7 @@ def _env():
         yield db_path, clock
     finally:
         app.dependency_overrides.clear()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def _post_login(client, username, password):

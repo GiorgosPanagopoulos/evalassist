@@ -22,6 +22,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from db_helpers import remove_db  # noqa: E402
+
 from app.core.audit import AuditEntry, write_audit  # noqa: E402
 from app.db.database import init_db  # noqa: E402
 
@@ -50,7 +52,7 @@ def test_init_db_write_audit_returns_id():
         assert isinstance(audit_id, int)
         assert audit_id == 1
     finally:
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_update_is_blocked():
@@ -69,7 +71,7 @@ def test_update_is_blocked():
             assert "append-only" in str(exc)
         conn.close()
     finally:
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_delete_is_blocked():
@@ -88,7 +90,7 @@ def test_delete_is_blocked():
             assert "append-only" in str(exc)
         conn.close()
     finally:
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_row_survives_blocked_update_and_delete():
@@ -124,7 +126,7 @@ def test_row_survives_blocked_update_and_delete():
         assert row["query"] == "Ποια η γνωμάτευση;"
         assert row["answer_text"] == "ΕΞΑΙΡΕΤΟΣ"
     finally:
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_answer_text_roundtrip_with_greek_quotes():
@@ -148,7 +150,7 @@ def test_answer_text_roundtrip_with_greek_quotes():
         conn.close()
         assert row["answer_text"] == answer
     finally:
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_migration_adds_answer_text_and_keeps_triggers():
@@ -201,7 +203,7 @@ def test_migration_adds_answer_text_and_keeps_triggers():
             assert "append-only" in str(exc)
         conn.close()
     finally:
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 # Το schema του audit_log ακριβώς όπως είναι σήμερα στην πραγματική DB
@@ -319,7 +321,7 @@ def test_migration_adds_refusal_reason_keeps_rows_and_triggers():
         assert type(value) is str
         assert value == "year_out_of_range"
     finally:
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_migration_runs_twice_without_error():
@@ -337,7 +339,7 @@ def test_migration_runs_twice_without_error():
         assert count == 3
         assert set(triggers) == {"audit_log_no_update", "audit_log_no_delete"}
     finally:
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 # Το schema του audit_log όπως είναι στην πραγματική ΒΔ πριν από το scope
@@ -419,7 +421,7 @@ def test_migration_adds_scope_columns_keeps_rows_and_triggers():
         conn.close()
         assert value == ("p1", "2025-01-01..2025-12-31", "2024-01-01..2024-12-31")
     finally:
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_scope_migration_second_run_changes_nothing():
@@ -444,7 +446,7 @@ def test_scope_migration_second_run_changes_nothing():
         assert schema_second == schema_first
         assert rows_second == rows_first
     finally:
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def run_all():

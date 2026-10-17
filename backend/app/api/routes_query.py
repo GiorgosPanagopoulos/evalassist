@@ -88,6 +88,15 @@ def _audit(
     return audit_id
 
 
+def _audit_error_path(*args, **kwargs) -> None:
+    """Audit στο error path. Αν αποτύχει και αυτό, γίνεται log (μόνο ο τύπος)
+    και ο caller κάνει re-raise το αρχικό σφάλμα: δεν επιστρέφονται δεδομένα."""
+    try:
+        _audit(*args, **kwargs)
+    except Exception as exc:
+        logger.error("Αποτυχία εγγραφής audit σε error path (%s)", type(exc).__name__)
+
+
 @router.post("/structured", response_model=StructuredQueryResponse)
 def query_structured(
     request: StructuredQueryRequest,
@@ -129,7 +138,9 @@ def query_structured(
     except Exception as exc:
         if not doc_ids:
             doc_ids = getattr(exc, "retrieved_doc_ids", []) or []
-        _audit(conn, user.username, request.model_dump_json(), doc_ids, "structured", **audit_scope)
+        _audit_error_path(
+            conn, user.username, request.model_dump_json(), doc_ids, "structured", **audit_scope
+        )
         raise
 
     try:
@@ -199,7 +210,7 @@ def query_semantic(
             doc_ids = result.retrieved_doc_ids
     except InvalidPeriodError:
         # Λάθος αιτήματος πριν από οποιαδήποτε ανάκτηση ή prompt.
-        _audit(
+        _audit_error_path(
             conn,
             user.username,
             request.question,
@@ -212,7 +223,7 @@ def query_semantic(
     except Exception as exc:
         if not doc_ids:
             doc_ids = getattr(exc, "retrieved_doc_ids", []) or []
-        _audit(
+        _audit_error_path(
             conn,
             user.username,
             request.question,

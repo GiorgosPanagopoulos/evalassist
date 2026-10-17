@@ -21,6 +21,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from db_helpers import remove_db  # noqa: E402
+
 from app.db import repository  # noqa: E402
 from app.db.database import SCHEMA_PATH, init_db  # noqa: E402
 from app.models.evaluation import (  # noqa: E402
@@ -275,7 +277,7 @@ def test_get_promotions_table_judged_for_chain():
             {"doc_id": "doc-career", "page": None, "section": "ΚΡΙΣΕΙΣ ΠΡΟΑΓΩΓΩΝ"}
         ]
     finally:
-        db_path.unlink(missing_ok=True)
+        remove_db(db_path)
 
 
 def test_get_promotions_table_empty_result_is_not_an_exception():
@@ -290,7 +292,7 @@ def test_get_promotions_table_empty_result_is_not_an_exception():
         assert result.citations == []
         assert result.retrieved_doc_ids == []
     finally:
-        db_path.unlink(missing_ok=True)
+        remove_db(db_path)
 
 
 def test_get_promotions_table_isolation_scope_no_cross_person_leak():
@@ -314,7 +316,7 @@ def test_get_promotions_table_isolation_scope_no_cross_person_leak():
         assert result.retrieved_doc_ids == ["doc-p1"]
         assert "doc-p2" not in result.retrieved_doc_ids
     finally:
-        db_path.unlink(missing_ok=True)
+        remove_db(db_path)
 
 
 def test_get_service_time_table_rows_and_citations():
@@ -344,7 +346,7 @@ def test_get_service_time_table_rows_and_citations():
         ]
         assert result.retrieved_doc_ids == ["doc-career"]
     finally:
-        db_path.unlink(missing_ok=True)
+        remove_db(db_path)
 
 
 def test_get_service_time_table_empty_result_is_not_an_exception():
@@ -359,7 +361,7 @@ def test_get_service_time_table_empty_result_is_not_an_exception():
         assert result.citations == []
         assert result.retrieved_doc_ids == []
     finally:
-        db_path.unlink(missing_ok=True)
+        remove_db(db_path)
 
 
 # --- citations: doc_id/page/section μόνο από τη DB ----------------------------

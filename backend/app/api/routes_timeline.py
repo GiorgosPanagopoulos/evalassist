@@ -55,6 +55,15 @@ def _audit(
     return audit_id
 
 
+def _audit_error_path(*args, **kwargs) -> None:
+    """Audit στο error path. Αν αποτύχει και αυτό, γίνεται log (μόνο ο τύπος)
+    και ο caller κάνει re-raise το αρχικό σφάλμα: δεν επιστρέφονται δεδομένα."""
+    try:
+        _audit(*args, **kwargs)
+    except Exception as exc:
+        logger.error("Αποτυχία εγγραφής audit σε error path (%s)", type(exc).__name__)
+
+
 @router.get("/person/{person_id}/timeline", response_model=TimelineResponse)
 def person_timeline(
     person_id: str,
@@ -66,7 +75,7 @@ def person_timeline(
         result = get_timeline(conn, person_id)
         doc_ids = result.retrieved_doc_ids
     except Exception:
-        _audit(conn, user.username, person_id, doc_ids)
+        _audit_error_path(conn, user.username, person_id, doc_ids)
         raise
 
     try:

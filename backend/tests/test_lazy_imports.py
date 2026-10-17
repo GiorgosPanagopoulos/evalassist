@@ -23,6 +23,8 @@ from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
 
+from db_helpers import remove_db  # noqa: E402
+
 LAZY_MODULES = ["chromadb", "requests", "app.retrieval.semantic", "app.ingestion.vectorstore"]
 # Δεν πρέπει να φορτώνονται ούτε με το flag ανοιχτό πριν από το πρώτο query,
 # πόσο μάλλον κλειστό.
@@ -114,7 +116,7 @@ def _run_child(semantic_enabled: str) -> dict:
         assert result.returncode == 0, result.stderr[-2000:]
         return json.loads(result.stdout.strip().splitlines()[-1])
     finally:
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_disabled_never_imports_chromadb_or_requests():

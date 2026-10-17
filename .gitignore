@@ -9,6 +9,9 @@ backend/data/
 *.db
 *.sqlite
 *.sqlite3
+# WAL mode: τα -wal/-shm περιέχουν σελίδες της βάσης (προσωπικά δεδομένα).
+*.db-wal
+*.db-shm
 
 # Vector store persistence
 chroma_db/

@@ -43,6 +43,7 @@ sys.path.insert(0, str(DEPLOY_DIR))
 import build_deploy_db  # noqa: E402
 import smoke_test  # noqa: E402
 from auth_helpers import TEST_PASSWORD, TEST_USERNAME, make_user  # noqa: E402
+from db_helpers import remove_db  # noqa: E402
 
 from app.api.deps import get_semantic_retriever_factory  # noqa: E402
 from app.api.main import create_app  # noqa: E402
@@ -176,8 +177,8 @@ def test_build_copies_only_data_tables_and_leaves_source_unchanged():
         assert dst.execute("PRAGMA foreign_key_check").fetchall() == []
         dst.close()
     finally:
-        os.remove(source)
-        target.unlink(missing_ok=True)
+        remove_db(source)
+        remove_db(target)
 
 
 def test_build_refuses_existing_target_and_leaves_it_untouched():
@@ -192,8 +193,8 @@ def test_build_refuses_existing_target_and_leaves_it_untouched():
             pass
         assert target.read_bytes() == b"not a database, must survive"
     finally:
-        os.remove(source)
-        os.remove(target)
+        remove_db(source)
+        remove_db(target)
 
 
 def test_build_refuses_missing_source_without_creating_target():
@@ -226,8 +227,8 @@ def test_build_cli_prints_no_content():
             assert forbidden not in output, forbidden
         assert "persons: 1" in output and "audit_log: 0" in output
     finally:
-        os.remove(source)
-        target.unlink(missing_ok=True)
+        remove_db(source)
+        remove_db(target)
 
 
 # --- smoke_test ---------------------------------------------------------------
@@ -333,7 +334,7 @@ def test_smoke_passes_on_structured_only_server_without_printing_secrets():
         assert _count(conn, "sessions") == 1
         conn.close()
     finally:
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_smoke_fails_on_wrong_password_without_printing_it():
@@ -347,7 +348,7 @@ def test_smoke_fails_on_wrong_password_without_printing_it():
         assert any(line.startswith("FAIL login") for line in lines), output
         assert wrong not in output
     finally:
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_smoke_fails_when_semantic_is_enabled():
@@ -364,7 +365,7 @@ def test_smoke_fails_when_semantic_is_enabled():
         assert any(line.startswith("FAIL me, semantic_enabled=false") for line in lines), output
         assert any(line.startswith("FAIL semantic κλειστό") for line in lines), output
     finally:
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 # --- deploy/ χωρίς αναγνωριστικά ----------------------------------------------

@@ -21,6 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from auth_helpers import logged_in_client  # noqa: E402
+from db_helpers import remove_db  # noqa: E402
 
 from app.api.deps import get_semantic_retriever_factory  # noqa: E402
 from app.api.main import app  # noqa: E402
@@ -184,7 +185,7 @@ def test_response_embeds_result_and_audit_id():
         assert isinstance(body["audit_id"], int)
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_audit_row_has_semantic_mode_and_citation_doc_ids():
@@ -209,7 +210,7 @@ def test_audit_row_has_semantic_mode_and_citation_doc_ids():
         _assert_audit_scope(row, "p1", PERIOD)
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_audit_row_records_unsupported_ranks_when_flagged():
@@ -235,7 +236,7 @@ def test_audit_row_records_unsupported_ranks_when_flagged():
         assert json.loads(row["unsupported_ranks"]) == ["ΥΠΟΛΟΧΑΓΟΣ"]
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_empty_scope_returns_200_with_empty_audit_doc_ids():
@@ -262,7 +263,7 @@ def test_empty_scope_returns_200_with_empty_audit_doc_ids():
         assert row["prompt_version"] == "v2"
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_llm_failure_after_retrieval_audits_retrieved_doc_ids():
@@ -295,7 +296,7 @@ def test_llm_failure_after_retrieval_audits_retrieved_doc_ids():
         _assert_audit_scope(rows[0], "p1", PERIOD)
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_pre_retrieval_failure_audits_empty_doc_ids():
@@ -324,7 +325,7 @@ def test_pre_retrieval_failure_audits_empty_doc_ids():
         assert rows[0]["prompt_version"] == "v2"
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_routing_hint_present_when_question_matches_heuristic():
@@ -349,7 +350,7 @@ def test_routing_hint_present_when_question_matches_heuristic():
         assert response.json()["result"]["routing_hint"] == "structured"
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_routing_hint_absent_when_question_does_not_match_heuristic():
@@ -368,7 +369,7 @@ def test_routing_hint_absent_when_question_does_not_match_heuristic():
         assert response.json()["result"]["routing_hint"] is None
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def _post_with_recording_retriever(db_path: Path, payload: dict):
@@ -411,7 +412,7 @@ def test_unknown_period_is_422_audited_without_retrieval():
         _assert_audit_scope(rows[0], "p1", "2030-01-01..2030-12-31")
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_unknown_person_is_422():
@@ -427,7 +428,7 @@ def test_unknown_person_is_422():
         _assert_audit_scope(rows[0], "ghost", PERIOD)
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def _assert_precheck_refusal(db_path: Path, question: str, reason: str, text_prefix: str):
@@ -470,7 +471,7 @@ def test_year_out_of_range_refused_without_retrieval():
         )
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_year_in_other_period_refused_with_redirect():
@@ -485,7 +486,7 @@ def test_year_in_other_period_refused_with_redirect():
         )
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_field_out_of_schema_refused_without_retrieval():
@@ -499,7 +500,7 @@ def test_field_out_of_schema_refused_without_retrieval():
         )
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def test_question_passing_precheck_reaches_retriever():
@@ -521,7 +522,7 @@ def test_question_passing_precheck_reaches_retriever():
         assert null_rows == 1
     finally:
         _clear_overrides()
-        os.remove(db_path)
+        remove_db(db_path)
 
 
 def run_all():
